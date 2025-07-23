@@ -1,28 +1,38 @@
 {
-  "name": "claude-trace-vertical-viz",
+  "name": "claude-trace-viz",
   "version": "1.0.0",
-  "description": "TypeScript CLI tool for visualizing Claude trace files with vertical bar visualization",
+  "description": "Interactive visualization tool for Claude conversation traces with token analysis",
   "main": "dist/cli.js",
   "bin": {
-    "trace-vertical": "./dist/cli.js"
+    "claude-trace-viz": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node dist/cli.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm test && npm run build",
+    "prepare": "npm run build"
   },
   "keywords": [
     "claude",
     "anthropic",
     "trace",
     "visualization",
-    "cli"
+    "cli",
+    "token-counter",
+    "conversation-analysis"
   ],
-  "author": "",
+  "author": "Adi Eldar",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/claude-trace-viz"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/claude-trace-viz/issues"
+  },
+  "homepage": "https://github.com/yourusername/claude-trace-viz#readme",
   "dependencies": {
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@mariozechner/claude-trace": "^1.0.3",

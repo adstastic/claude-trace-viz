@@ -1,125 +1,133 @@
-# Claude Trace Visualization Tool
+# Claude Trace Visualizer
 
-A tool for visualizing Claude Code conversation traces, showing token distribution across different message types (user, system, assistant, tools).
+Interactive visualization tool for Claude conversation traces with token analysis. Creates HTML visualizations showing token distribution across different message types (user, system, assistant, tools) with support for accurate token counting via Anthropic's API.
 
 ## Installation
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd claude-trace-visualisation-tool
+# Install globally
+npm install -g claude-trace-viz
 
-# Install dependencies using uv
-uv pip install typer
+# Or use locally
+npm install claude-trace-viz
 ```
 
 ## Usage
 
-### Incremental Grid Visualization (Recommended)
-Shows only NEW content from each API call, removing duplicated conversation history:
+```bash
+# Basic usage
+claude-trace-viz .claude-trace/log-2025-07-23-04-51-19.jsonl
+
+# With Anthropic API for accurate token counts
+claude-trace-viz trace.jsonl --use-anthropic-api --api-key YOUR_KEY
+
+# Or set environment variable
+export ANTHROPIC_API_KEY=your_key
+claude-trace-viz trace.jsonl --use-anthropic-api
+
+# Specify output file
+claude-trace-viz trace.jsonl -o custom-output.html
+
+# Force reprocessing (bypass cache)
+claude-trace-viz trace.jsonl --force-reprocess
+
+# Don't auto-open in browser
+claude-trace-viz trace.jsonl --no-open
+```
+
+## Features
+
+- **Interactive Visualization**: Vertical bar chart with conversation flow
+- **Token Counting**: 
+  - Accurate counts via Anthropic API (optional)
+  - Fallback to local estimation when API unavailable
+  - Visual indicators for estimated vs actual counts
+- **Interactive Controls**:
+  - Toggle between log/linear scale
+  - Group MCP tools into single bars
+- **Comprehensive Analysis**:
+  - Token distribution by message type
+  - Token usage by model (opus, sonnet, haiku)
+  - MCP tool token breakdown
+  - Preprocessing request detection
+- **Performance**:
+  - Caching of processed segments
+  - Efficient batch processing
+  - Rate limit handling for API calls
+
+## Visualization Details
+
+The tool generates an interactive HTML file with:
+
+- **Vertical bars**: Each bar represents a message/tool segment
+  - Width proportional to token count (log or linear scale)
+  - Color-coded by type (user, system, assistant, tools, etc.)
+  - Hover for content preview
+- **Statistics panels**: 
+  - Total token usage and context percentage
+  - Token distribution by type with bar charts
+  - Model-specific token usage
+  - Top MCP tools by token count
+- **Visual indicators**:
+  - Crosshatch pattern for preprocessing requests
+  - White border for NEW content (not from history)
+  - "~" prefix for estimated token counts
+
+## Token Counting
+
+### Accurate Counting (Recommended)
+When using `--use-anthropic-api`, the tool uses Anthropic's official token counting API for accurate counts. This requires an API key and is subject to rate limits.
+
+### Estimation Fallback
+When the API is unavailable or for specific content types, the tool falls back to:
+1. The `@anthropic-ai/tokenizer` package (optimized for older models)
+2. Character-based estimation as a last resort
+
+## Segments Cache
+
+The tool caches processed segments in `.segments.json` files alongside the trace files. These include:
+- Processed segments with token counts
+- Processing options (whether API was used)
+- Timestamp of processing
+
+Benefits:
+- **Performance**: Instant visualization after first processing
+- **API Persistence**: Accurate token counts from API are saved permanently
+- **Version Control**: Segments files can be committed to preserve accurate counts
+
+## Development
 
 ```bash
-uv run python visualize_trace_incremental.py .claude-trace/log-2025-07-23-04-51-19.jsonl
+# Install dependencies
+npm install
+
+# Build TypeScript
+npm run build
+
+# Run tests
+npm test
+
+# Development mode (watch)
+npm run dev
 ```
 
-### Full Grid Visualization
-Shows all tokens including duplicated conversation history:
+## API
 
-```bash
-uv run python visualize_trace_grid.py .claude-trace/log-2025-07-23-04-51-19.jsonl
-```
+### CLI Options
 
-### Treemap Visualization
-Shows hierarchical breakdown of token usage by turn:
+- `file`: Path to the .jsonl trace file (required)
+- `-o, --output <file>`: Output HTML filename
+- `-m, --max-tokens <number>`: Maximum context window size (default: 200000)
+- `--no-open`: Don't automatically open the HTML file
+- `--use-anthropic-api`: Use Anthropic API for accurate token counting
+- `--api-key <key>`: Anthropic API key (or set ANTHROPIC_API_KEY env var)
+- `--force-reprocess`: Force reprocessing even if segments file exists
 
-```bash
-uv run python visualize_trace.py .claude-trace/log-2025-07-23-04-51-19.jsonl
-```
+## Requirements
 
-## How Claude Code Conversations Work
+- Node.js >= 16.0.0
+- Valid `.jsonl` trace files from Claude conversations
 
-Based on analyzing the trace files, here's how Claude Code structures its API conversations:
+## License
 
-### 1. Quota Check
-- The first API call is typically a minimal "quota" check
-- User message: "quota" (1 token)
-- Claude responds with "Here" using `max_tokens: 1`
-- This checks API availability without consuming significant tokens
-
-### 2. System Prompt Loading
-- System prompts are loaded in subsequent API calls
-- Format: Can be either a string or array of objects: `[{"type": "text", "text": "..."}]`
-- System prompts contain Claude Code's instructions and context
-- These are typically loaded once but may vary between calls
-
-### 3. Tool Definitions
-- Tools (functions Claude can call) are loaded as needed
-- In the analyzed trace, tools consume the majority of tokens (79-92%)
-- Tools include file operations, search, web access, etc.
-- Tool definitions are JSON schemas that can be quite large
-
-### 4. Conversation History
-- Each API call includes the full conversation history
-- This means messages are duplicated across calls
-- The incremental visualization filters out these duplicates
-- Only NEW content (new user messages and assistant responses) are unique per call
-
-### 5. Token Distribution Pattern
-Typical token distribution in a Claude Code session:
-- **Tools**: 70-90% (due to large JSON schemas)
-- **System prompts**: 5-10%
-- **User messages**: 1-15% 
-- **Assistant responses**: <1% (typically concise)
-
-### 6. Message Structure
-Messages in the trace follow this pattern:
-```json
-{
-  "request": {
-    "body": {
-      "messages": [...],      // Conversation history
-      "system": [...],        // System prompt (optional)
-      "tools": [...],         // Tool definitions (optional)
-      "max_tokens": number    // Response limit
-    }
-  },
-  "response": {
-    "body": {
-      "content": [...],       // Assistant's response
-      "usage": {
-        "input_tokens": n,    // Total input tokens
-        "output_tokens": n    // Response tokens
-      }
-    }
-  }
-}
-```
-
-## Visualization Types
-
-### Grid Visualization (Incremental)
-- **Best for**: Understanding actual token usage per turn
-- **Shows**: Only new content added in each API call
-- **Color coding**:
-  - 🔵 Blue: User messages
-  - 🔴 Red: System prompts
-  - 🟢 Green: Assistant messages
-  - 🟡 Yellow: Tool definitions
-  - 🟠 Orange: Tool usage
-
-### Grid Visualization (Full)
-- **Best for**: Seeing total context window usage
-- **Shows**: All tokens including duplicated history
-- **Note**: Can exceed 100% of context window due to accumulation
-
-### Treemap Visualization
-- **Best for**: Hierarchical view of token distribution
-- **Shows**: Nested breakdown by turn and message type
-- **Interactive**: Hover for details
-
-## Token Estimation
-
-The tool uses a simple heuristic for token estimation when actual counts aren't available:
-- Approximately 1 token per 4 characters
-- This is a rough estimate; actual tokenization may vary
-- The trace files contain actual token counts in the response which are used when available
+MIT

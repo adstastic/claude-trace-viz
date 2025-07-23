@@ -5,17 +5,21 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import open from 'open';
 import { VerticalVisualizer } from './vertical-visualizer';
+import { SegmentsIO } from './utils/segments-io';
 
 const program = new Command();
 
 program
-  .name('trace-vertical')
-  .description('Generate vertical bar visualization of Claude trace files')
+  .name('claude-trace-viz')
+  .description('Generate visualizations of Claude trace files')
   .version('1.0.0')
   .argument('<file>', 'Path to the .jsonl trace file')
-  .option('-o, --output <file>', 'Output HTML file name', 'trace_vertical_visualization.html')
+  .option('-o, --output <file>', 'Output HTML file name')
   .option('-m, --max-tokens <number>', 'Maximum context window size', '200000')
   .option('--no-open', 'Do not automatically open the HTML file')
+  .option('--use-anthropic-api', 'Use Anthropic API for accurate token counting')
+  .option('--api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
+  .option('--force-reprocess', 'Force reprocessing even if segments file exists')
   .action(async (file: string, options) => {
     try {
       // Validate input file exists
@@ -30,15 +34,28 @@ program
       
       console.log(`Processing trace file: ${file}`);
       
+      // Generate default output filename based on trace file
+      const outputFile = options.output || SegmentsIO.getHtmlFilePath(file);
+      
+      // Handle API key
+      const apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
+      if (options.useAnthropicApi && !apiKey) {
+        console.error('Error: --use-anthropic-api requires an API key via --api-key or ANTHROPIC_API_KEY env var');
+        process.exit(1);
+      }
+      
       // Create visualizer instance
       const visualizer = new VerticalVisualizer();
       
       // Generate visualization
-      const htmlContent = await visualizer.generateVisualization(file, maxTokens);
+      const htmlContent = await visualizer.generateVisualization(file, maxTokens, {
+        useAnthropicApi: options.useAnthropicApi || false,
+        apiKey
+      }, options.forceReprocess);
       
       // Write output file
-      await fs.writeFile(options.output, htmlContent, 'utf-8');
-      console.log(`Vertical visualization saved to ${options.output}`);
+      await fs.writeFile(outputFile, htmlContent, 'utf-8');
+      console.log(`Vertical visualization saved to ${outputFile}`);
       
       // Display summary statistics
       const stats = visualizer.getStatistics();
@@ -65,8 +82,8 @@ program
       
       // Open file if requested
       if (options.open) {
-        console.log(`\nOpening ${options.output} in browser...`);
-        await open(options.output);
+        console.log(`\nOpening ${outputFile} in browser...`);
+        await open(outputFile);
       }
       
     } catch (error) {

@@ -6,22 +6,43 @@ export class TokenCounter {
    * Get token count for a segment, using actual API usage data when available,
    * falling back to Anthropic tokenizer for estimation
    */
-  getTokenCount(segment: any, apiUsage?: any): TokenResult {
-    // 1. Try to use actual API token counts first
-    if (apiUsage && segment.isNew) {
-      // For new assistant responses, use output tokens
-      if (segment.type === 'assistant' && apiUsage.output_tokens) {
-        return { 
-          count: apiUsage.output_tokens, 
-          isEstimate: false 
-        };
+  getTokenCount(content: any, apiUsage?: any): TokenResult {
+    // 1. For streaming responses, check if we have body_raw that needs parsing
+    if (apiUsage && apiUsage.body_raw && typeof apiUsage.body_raw === 'string') {
+      try {
+        // Parse streaming response to get usage data
+        const lines = apiUsage.body_raw.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.substring(6));
+            if (data.type === 'message_start' && data.message?.usage?.output_tokens) {
+              return {
+                count: data.message.usage.output_tokens,
+                isEstimate: false
+              };
+            }
+          }
+        }
+      } catch (error) {
+        // Continue to fallback
       }
-      // For other segments when we have usage data, we could calculate proportionally
-      // but for now we'll fall back to estimation
     }
     
-    // 2. Fall back to Anthropic tokenizer (marked as estimate)
-    const text = this.extractTextContent(segment.content);
+    // 2. Try to use actual API token counts from regular responses
+    if (apiUsage && apiUsage.output_tokens) {
+      return { 
+        count: apiUsage.output_tokens, 
+        isEstimate: false 
+      };
+    }
+    
+    // 3. Fall back to Anthropic tokenizer (marked as estimate)
+    const text = this.extractTextContent(content);
+    
+    // If no actual content after filtering, return 0
+    if (!text || text.trim().length === 0) {
+      return { count: 0, isEstimate: true };
+    }
     
     try {
       const count = countTokens(text);
@@ -37,7 +58,7 @@ export class TokenCounter {
   /**
    * Extract text content from various content formats
    */
-  private extractTextContent(content: any): string {
+  extractTextContent(content: any): string {
     if (typeof content === 'string') {
       return content;
     }
@@ -49,6 +70,10 @@ export class TokenCounter {
         }
         if (item && typeof item === 'object') {
           if (item.type === 'text' && item.text) {
+            // Skip system-reminder messages
+            if (item.text.includes('<system-reminder>')) {
+              return '';
+            }
             return item.text;
           }
           if (item.type === 'tool_use' && item.input) {
@@ -56,7 +81,7 @@ export class TokenCounter {
           }
         }
         return '';
-      }).join(' ');
+      }).filter(text => text.length > 0).join(' ');
     }
     
     if (content && typeof content === 'object') {

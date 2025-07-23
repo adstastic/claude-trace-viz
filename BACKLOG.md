@@ -30,26 +30,26 @@
   - [x] Test error handling and fallback behavior
 
 ### Trace Processing
-- [ ] Port trace processing logic (src/utils/trace-processor.ts)
-  - [ ] Read JSONL files line by line
-  - [ ] Extract segments with deduplication logic
-  - [ ] Track seen content (system prompts, messages, tools)
-  - [ ] Handle model detection (opus, haiku, sonnet)
-  - [ ] Identify preprocessing requests
-  - [ ] Group tools by MCP prefix
+- [x] Port trace processing logic (src/utils/trace-processor.ts)
+  - [x] Read JSONL files line by line
+  - [x] Extract segments with deduplication logic
+  - [x] Track seen content (system prompts, messages, tools)
+  - [x] Handle model detection (opus, haiku, sonnet)
+  - [x] Identify preprocessing requests
+  - [x] Group tools by MCP prefix
 
 ### Visualization
-- [ ] Port HTML generation (src/vertical-visualizer.ts)
-  - [ ] Generate Solarized Dark themed HTML
-  - [ ] Implement segment bars with log scale widths
-  - [ ] Add grid lines with token scale markers
-  - [ ] Create tooltips with token info (marking estimates)
-  - [ ] Generate statistics sections with model breakdowns
-  - [ ] Add visual indicators for estimated tokens (~)
+- [x] Port HTML generation (src/vertical-visualizer.ts)
+  - [x] Generate Solarized Dark themed HTML
+  - [x] Implement segment bars with log scale widths
+  - [x] Add grid lines with token scale markers
+  - [x] Create tooltips with token info (marking estimates)
+  - [x] Generate statistics sections with model breakdowns
+  - [x] Add visual indicators for estimated tokens (~)
 
 ### Final Steps
-- [ ] Add auto-open functionality with 'open' package
-- [ ] Test with sample trace files
+- [x] Add auto-open functionality with 'open' package
+- [x] Test with sample trace files
 - [ ] Update documentation
   - [ ] Add TypeScript usage instructions to CLAUDE.md
   - [ ] Document token counting approach and limitations

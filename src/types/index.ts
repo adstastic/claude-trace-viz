@@ -23,9 +23,15 @@ export interface Statistics {
   typeTokens: Record<string, number>;
   modelTokens: Record<string, number>;
   mcpTokens: Record<string, number>;
+  modelMcpTokens: Record<string, Record<string, number>>;
   preprocessingTokens: number;
 }
 
 export interface VisualizationOptions {
   maxContextTokens: number;
+}
+
+export interface ApiOptions {
+  useAnthropicApi: boolean;
+  apiKey?: string;
 }

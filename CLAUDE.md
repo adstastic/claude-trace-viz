@@ -14,6 +14,26 @@ This is a Claude trace visualization tool that creates interactive visualization
 
 ### Running the Visualizers
 
+**TypeScript Vertical Visualization** (with interactive controls):
+```bash
+# Build first
+npm run build
+
+# Run with estimated token counts
+node dist/cli.js .claude-trace/log-2025-07-23-04-51-19.jsonl
+
+# Run with accurate API token counts
+node dist/cli.js .claude-trace/log-2025-07-23-04-51-19.jsonl --use-anthropic-api --api-key YOUR_KEY
+
+# Features:
+# - Checkboxes for log/linear scale toggle
+# - Checkbox to group all MCP tools into single bars
+# - Accurate token counting via Anthropic API (optional)
+# - Responsive bar widths based on viewport
+```
+
+**Python Visualizations:**
+
 **Treemap Visualization** (hierarchical view):
 ```bash
 uv run python visualize_trace.py .claude-trace/log-2025-07-23-04-51-19.jsonl

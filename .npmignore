@@ -1,0 +1,55 @@
+# Source files
+src/
+*.ts
+!dist/**/*.d.ts
+
+# Test files
+__tests__/
+*.test.ts
+jest.config.js
+
+# Python files (to be removed)
+*.py
+requirements.txt
+.venv/
+
+# Generated visualization files
+*.html
+!dist/**/*.html
+
+# Claude trace files
+.claude-trace/
+
+# Development files
+.env
+*.log
+node_modules/
+coverage/
+
+# Git files
+.git/
+.gitignore
+
+# Config files
+tsconfig.json
+.editorconfig
+.eslintrc*
+.prettierrc*
+
+# Documentation source
+BACKLOG.md
+CLAUDE.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.tsbuildinfo
