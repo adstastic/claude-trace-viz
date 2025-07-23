@@ -27,3 +27,10 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Trace files (too large for git)
+*.jsonl
+*.html
+
+# Segments files are ok to keep
+!*.segments.json
