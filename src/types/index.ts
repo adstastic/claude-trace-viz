@@ -11,6 +11,10 @@ export interface Segment {
   isPreprocessing: boolean;
   isNew?: boolean;
   toolCount?: number;
+  fullContent?: string;  // Optional full content for modal display
+  rawData?: any;  // Raw request/response data from trace
+  lineNumber?: number;  // Line number in the trace file (0-indexed)
+  segmentIndex?: number;  // Index within the line for multiple segments of same type
 }
 
 export interface TokenResult {

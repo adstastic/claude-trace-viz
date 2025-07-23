@@ -159,8 +159,8 @@ export class TraceProcessor {
       console.log(`Processing ${this.totalSegments} segments with Anthropic API...`);
     }
 
-    for (let entryNum = 0; entryNum < lines.length; entryNum++) {
-      const line = lines[entryNum];
+    for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
+      const line = lines[lineNumber];
       if (!line.trim()) continue;
 
       try {
@@ -198,10 +198,12 @@ export class TraceProcessor {
                 tokens: tokenResult.count,
                 tokensEstimated: tokenResult.isEstimate,
                 content: systemText.length > 300 ? systemText.substring(0, 300) + '...' : systemText,
-                turn: entryNum + 1,
+                turn: lineNumber + 1,
                 displayName: 'System Prompt',
                 model: modelShort,
-                isPreprocessing
+                isPreprocessing,
+                lineNumber,
+                segmentIndex: 0
               });
             }
           }
@@ -231,10 +233,12 @@ export class TraceProcessor {
                     content: tokenResult.count > 300 ? 
                       this.tokenCounter.extractTextContent(content).substring(0, 300) + '...' : 
                       this.tokenCounter.extractTextContent(content),
-                    turn: entryNum + 1,
+                    turn: lineNumber + 1,
                     displayName: 'User',
                     model: modelShort,
-                    isPreprocessing
+                    isPreprocessing,
+                    lineNumber,
+                    segmentIndex: i - this.previousMessageCount
                   });
                 }
               } else if (role === 'assistant') {
@@ -258,10 +262,12 @@ export class TraceProcessor {
                             content: item.text && item.text.length > 300 ? 
                               item.text.substring(0, 300) + '...' : 
                               item.text || '',
-                            turn: entryNum + 1,
+                            turn: lineNumber + 1,
                             displayName: 'Assistant',
                             model: modelShort,
-                            isPreprocessing
+                            isPreprocessing,
+                            lineNumber,
+                            segmentIndex: segments.filter(s => s.lineNumber === lineNumber && s.type === 'assistant').length
                           });
                         }
                       } else if (item.type === 'tool_use') {
@@ -280,10 +286,12 @@ export class TraceProcessor {
                             tokens: tokenResult.count,
                             tokensEstimated: tokenResult.isEstimate,
                             content: `Using tool: ${toolName}\n${toolInput.substring(0, 200)}...`,
-                            turn: entryNum + 1,
+                            turn: lineNumber + 1,
                             displayName: `Tool Use: ${toolName}`,
                             model: modelShort,
-                            isPreprocessing
+                            isPreprocessing,
+                            lineNumber,
+                            segmentIndex: segments.filter(s => s.lineNumber === lineNumber && s.type === 'tool_use').length
                           });
                         }
                       }
@@ -303,10 +311,12 @@ export class TraceProcessor {
                       tokens: tokenResult.count,
                       tokensEstimated: tokenResult.isEstimate,
                       content: content.length > 300 ? content.substring(0, 300) + '...' : content,
-                      turn: entryNum + 1,
+                      turn: lineNumber + 1,
                       displayName: 'Assistant',
                       model: modelShort,
-                      isPreprocessing
+                      isPreprocessing,
+                      lineNumber,
+                      segmentIndex: segments.filter(s => s.lineNumber === lineNumber && s.type === 'assistant').length
                     });
                   }
                 }
@@ -341,11 +351,13 @@ export class TraceProcessor {
                 tokens: tokenResult.count,
                 tokensEstimated: tokenResult.isEstimate,
                 content: `Tools: ${toolNames.join(', ')}${anthropicTools.length > 5 ? '...' : ''}\n${anthropicTools.length} tools, ${tokenResult.count.toLocaleString()} tokens`,
-                turn: entryNum + 1,
+                turn: lineNumber + 1,
                 displayName: 'Anthropic Tools',
                 toolCount: anthropicTools.length,
                 model: modelShort,
-                isPreprocessing
+                isPreprocessing,
+                lineNumber,
+                segmentIndex: 0
               });
             }
             
@@ -366,11 +378,13 @@ export class TraceProcessor {
                 tokens: tokenResult.count,
                 tokensEstimated: tokenResult.isEstimate,
                 content: `MCP: ${mcpName}\n${mcpTools.length} tools, ${tokenResult.count.toLocaleString()} tokens`,
-                turn: entryNum + 1,
+                turn: lineNumber + 1,
                 displayName: `MCP: ${mcpName}`,
                 toolCount: mcpTools.length,
                 model: modelShort,
-                isPreprocessing
+                isPreprocessing,
+                lineNumber,
+                segmentIndex: Object.keys(mcpGroups).sort().indexOf(mcpName)
               });
             }
           }
@@ -393,11 +407,13 @@ export class TraceProcessor {
                   tokens: tokenResult.count,
                   tokensEstimated: tokenResult.isEstimate,
                   content: text.length > 300 ? text.substring(0, 300) + '...' : text,
-                  turn: entryNum + 1,
+                  turn: lineNumber + 1,
                   isNew: true,
                   displayName: 'Assistant Response',
                   model: modelShort,
-                  isPreprocessing
+                  isPreprocessing,
+                  lineNumber,
+                  segmentIndex: segments.filter(s => s.lineNumber === lineNumber && s.type === 'assistant').length
                 });
               }
             } else if (contentItem.type === 'tool_use') {
@@ -417,18 +433,20 @@ export class TraceProcessor {
                   tokens: tokenResult.count,
                   tokensEstimated: tokenResult.isEstimate,
                   content: `Using tool: ${toolName}\n${toolInput.substring(0, 200)}...`,
-                  turn: entryNum + 1,
+                  turn: lineNumber + 1,
                   isNew: true,
                   displayName: `Tool Use: ${toolName}`,
                   model: modelShort,
-                  isPreprocessing
+                  isPreprocessing,
+                  lineNumber,
+                  segmentIndex: segments.filter(s => s.lineNumber === lineNumber && s.type === 'tool_use').length
                 });
               }
             }
           }
         }
       } catch (error) {
-        console.error(`Error processing line ${entryNum + 1}:`, error);
+        console.error(`Error processing line ${lineNumber + 1}:`, error);
       }
     }
 

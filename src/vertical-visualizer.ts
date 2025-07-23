@@ -1,6 +1,7 @@
 import { Statistics, Segment, ApiOptions } from './types';
 import { TraceProcessor } from './utils/trace-processor';
 import { SegmentsIO } from './utils/segments-io';
+import { TraceReader } from './utils/trace-reader';
 
 export class VerticalVisualizer {
   private statistics: Statistics = {
@@ -11,8 +12,10 @@ export class VerticalVisualizer {
     modelMcpTokens: {},
     preprocessingTokens: 0
   };
+  private traceFilePath: string = '';
 
   async generateVisualization(filepath: string, maxTokens: number, apiOptions?: ApiOptions, forceReprocess?: boolean): Promise<string> {
+    this.traceFilePath = filepath;
     let segments: Segment[];
     let fromCache = false;
     
@@ -48,7 +51,7 @@ export class VerticalVisualizer {
     this.calculateStatistics(segments);
     
     // Generate HTML
-    return this.generateHTML(segments, maxTokens);
+    return this.generateHTML(segments, maxTokens, filepath);
   }
 
   private calculateStatistics(segments: Segment[]): void {
@@ -106,7 +109,7 @@ export class VerticalVisualizer {
     }
   }
 
-  private generateHTML(segments: Segment[], maxTokens: number): string {
+  private generateHTML(segments: Segment[], maxTokens: number, traceFilePath: string): string {
     // Calculate scale for log transformation
     const maxSegmentTokens = Math.max(...segments.map(s => s.tokens));
     const minWidthPercent = 2; // Minimum 2% width for visibility
@@ -139,7 +142,10 @@ export class VerticalVisualizer {
       const tokenLabel = segment.tokensEstimated ? '~' : '';
       const label = `${segment.displayName} (${tokenLabel}${segment.tokens.toLocaleString()} tokens)`;
       
-      barsHTML += `<div class="${classes}" data-tokens="${segment.tokens}" style="width: ${widthPercent}%;" title="${this.escapeHtml(segment.content)}">
+      // Store segment index for retrieval
+      const segmentIndex = segments.indexOf(segment);
+      
+      barsHTML += `<div class="${classes}" data-tokens="${segment.tokens}" data-segment-index="${segmentIndex}" style="width: ${widthPercent}%;" title="${this.escapeHtml(segment.content)}" onclick="showSegmentContent(${segmentIndex})">
         <span class="segment-label">${this.escapeHtml(label)}</span>
       </div>\n`;
     }
@@ -411,6 +417,97 @@ export class VerticalVisualizer {
         .control-item label:hover {
             color: #fdf6e3; /* base3 */
         }
+        
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            overflow: auto;
+        }
+        
+        .modal-content {
+            background-color: #073642; /* base02 */
+            margin: 5% auto;
+            padding: 20px;
+            border: 2px solid #586e75; /* base01 */
+            border-radius: 8px;
+            width: 80%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #586e75; /* base01 */
+        }
+        
+        .modal-title {
+            color: #93a1a1; /* base1 */
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .modal-close {
+            color: #839496; /* base0 */
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 20px;
+            padding: 0 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        
+        .modal-close:hover {
+            background: #002b36; /* base03 */
+            color: #fdf6e3; /* base3 */
+        }
+        
+        .modal-body {
+            color: #839496; /* base0 */
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #002b36; /* base03 */
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #073642; /* base02 */
+            overflow-x: auto;
+        }
+        
+        .json-key {
+            color: #268bd2; /* blue */
+        }
+        
+        .json-string {
+            color: #2aa198; /* cyan */
+        }
+        
+        .json-number {
+            color: #d33682; /* magenta */
+        }
+        
+        .json-boolean {
+            color: #b58900; /* yellow */
+        }
+        
+        .json-null {
+            color: #dc322f; /* red */
+        }
     </style>
 </head>
 <body>
@@ -424,6 +521,18 @@ export class VerticalVisualizer {
             <label for="groupMCPs">Group MCPs</label>
         </div>
     </div>
+    
+    <!-- Modal for showing raw content -->
+    <div id="contentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Segment Content</h2>
+                <span class="modal-close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+    
     <h1>Claude Trace Vertical Visualization</h1>
     
     <div class="stats">
@@ -535,8 +644,12 @@ export class VerticalVisualizer {
         const maxWidthPercent = ${maxWidthPercent};
         
         // Store original segments for MCP grouping
-        const originalBarsHTML = \`${barsHTML}\`;
+        const originalBarsHTML = \`<div class="grid-lines">${gridLinesHTML}</div>${barsHTML}\`;
         const segments = ${JSON.stringify(segments)};
+        const traceFilePath = ${JSON.stringify(traceFilePath)};
+        
+        // Note: In a real implementation, we would need to make an API call to read the trace file
+        // For now, we'll show the metadata and indicate that full raw data requires server access
         
         function updateVisualization() {
             const logScale = document.getElementById('logScale').checked;
@@ -633,6 +746,10 @@ export class VerticalVisualizer {
                 // Restore original bars
                 barsContainer.innerHTML = originalBarsHTML;
             }
+            
+            // Redraw grid lines after updating bars
+            const logScale = document.getElementById('logScale').checked;
+            updateScale(logScale);
         }
         
         function updateScale(useLogScale) {
@@ -722,6 +839,137 @@ export class VerticalVisualizer {
                 }
             }
         }
+        
+        // Modal functions
+        async function showSegmentContent(segmentIndex) {
+            const segment = segments[segmentIndex];
+            if (!segment) return;
+            
+            const modal = document.getElementById('contentModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalBody = document.getElementById('modalBody');
+            
+            // Set title
+            modalTitle.textContent = \`\${segment.displayName} - \${segment.type} (\${segment.tokens.toLocaleString()} tokens)\`;
+            
+            // Note: To show actual raw data from the trace file, we would need server access
+            // This is a limitation of the static HTML output
+            let rawData = null;
+            let dataSource = 'reconstructed';
+            
+            // Build representation from segment data
+            switch (segment.type) {
+                    case 'user':
+                        rawData = {
+                            role: 'user',
+                            content: segment.content.endsWith('...') ? 
+                                segment.content + ' [TRUNCATED]' : segment.content
+                        };
+                        break;
+                        
+                    case 'assistant':
+                        rawData = {
+                            role: 'assistant',
+                            content: [{
+                                type: 'text',
+                                text: segment.content.endsWith('...') ? 
+                                    segment.content + ' [TRUNCATED]' : segment.content
+                            }]
+                        };
+                        break;
+                        
+                    case 'system':
+                        rawData = {
+                            system: segment.content.endsWith('...') ? 
+                                segment.content + ' [TRUNCATED]' : segment.content
+                        };
+                        break;
+                        
+                    case 'tool_use':
+                        const toolMatch = segment.content.match(/Using tool: (\\S+)/);
+                        rawData = {
+                            type: 'tool_use',
+                            name: toolMatch ? toolMatch[1] : 'unknown',
+                            input: '[TOOL INPUT DATA]'
+                        };
+                        break;
+                        
+                    case 'tools':
+                    case 'mcp_tools':
+                        rawData = {
+                            tools: \`[\${segment.toolCount} tool definitions]\`,
+                            note: 'Full tool schemas not shown for brevity'
+                        };
+                        break;
+            }
+            
+            // Add metadata
+            const metadata = {
+                segment_info: {
+                    type: segment.type,
+                    model: segment.model,
+                    turn: segment.turn,
+                    tokens: segment.tokens,
+                    tokens_estimated: segment.tokensEstimated,
+                    is_new: segment.isNew || false,
+                    is_preprocessing: segment.isPreprocessing,
+                    line_number: segment.lineNumber,
+                    segment_index: segment.segmentIndex,
+                    data_source: dataSource
+                },
+                note: segment.lineNumber !== undefined ? 
+                    'Full raw data from trace file requires server access' : 
+                    'Line number not available for full raw data'
+            };
+            
+            // Format as JSON with syntax highlighting
+            const displayData = {
+                metadata,
+                raw_data: rawData
+            };
+            
+            // Add trace file location info if available
+            if (segment.lineNumber !== undefined) {
+                displayData.trace_location = {
+                    file: traceFilePath,
+                    line: segment.lineNumber + 1,  // Convert to 1-indexed for display
+                    segment_index: segment.segmentIndex
+                };
+            }
+            
+            const jsonStr = JSON.stringify(displayData, null, 2);
+            
+            // Basic JSON syntax highlighting
+            const highlightedJson = jsonStr
+                .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
+                .replace(/: "([^"]*)"/g, ': <span class="json-string">"$1"</span>')
+                .replace(/: (\\d+)/g, ': <span class="json-number">$1</span>')
+                .replace(/: (true|false)/g, ': <span class="json-boolean">$1</span>')
+                .replace(/: null/g, ': <span class="json-null">null</span>');
+            
+            modalBody.innerHTML = highlightedJson;
+            modal.style.display = 'block';
+        }
+        
+        function closeModal() {
+            const modal = document.getElementById('contentModal');
+            modal.style.display = 'none';
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('contentModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
     </script>
 </body>
 </html>`;
