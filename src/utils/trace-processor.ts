@@ -61,34 +61,27 @@ export class TraceProcessor {
     return model.toLowerCase().includes('haiku') && inputTokens < 100;
   }
 
-  private async addSegmentsFromPair(
+  private async addSegmentsFromConversation(
     segments: Segment[],
-    pair: ProcessedPair,
-    pairIndex: number,
-    allPairs: ProcessedPair[],
+    finalPair: ProcessedPair,
     lineNumber: number,
     model: string,
     isPreprocessing: boolean
   ): Promise<void> {
-    const previousPair = pairIndex > 0 ? allPairs[pairIndex - 1] : null;
-    const usage = pair.response.usage || {};
+    if (!finalPair || !finalPair.request) {
+      console.error('Invalid finalPair in addSegmentsFromConversation:', finalPair);
+      return;
+    }
     
-    // Track what content we've already seen in previous pairs
-    const previousSystemHash = previousPair?.request.system ? 
-      this.contentHash(this.extractSystemText(previousPair.request.system)) : null;
-    const previousToolsHash = previousPair?.request.tools ? 
-      this.contentHash(previousPair.request.tools) : null;
-    const previousMessageCount = previousPair?.request.messages?.length || 0;
+    const usage = finalPair.response?.usage || {};
     
-    // Process system prompt if it's new
-    if (pair.request.system) {
-      const systemText = this.extractSystemText(pair.request.system);
-      const systemHash = this.contentHash(systemText);
+    // Process system prompt
+    if (finalPair.request.system) {
+      const systemText = this.extractSystemText(finalPair.request.system);
       
-      if (systemText && systemHash !== previousSystemHash) {
+      if (systemText) {
         const tokenResult = await this.getTokenCount(
           { type: 'text', text: systemText },
-          usage,
           model,
           'system'
         );
@@ -110,13 +103,13 @@ export class TraceProcessor {
       }
     }
     
-    // Process NEW messages only
-    const messages = pair.request.messages || [];
-    for (let i = previousMessageCount; i < messages.length; i++) {
+    // Process all messages in the conversation
+    const messages = finalPair.request.messages || [];
+    for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
       
       if (message.role === 'user') {
-        const tokenResult = await this.getTokenCount(message.content, usage, model, 'user');
+        const tokenResult = await this.getTokenCount(message.content, model, 'user');
         if (tokenResult.count > 0) {
           segments.push({
             type: 'user',
@@ -128,7 +121,7 @@ export class TraceProcessor {
             model,
             isPreprocessing,
             lineNumber,
-            segmentIndex: i - previousMessageCount
+            segmentIndex: i
           });
         }
       } else if (message.role === 'assistant' && Array.isArray(message.content)) {
@@ -137,7 +130,6 @@ export class TraceProcessor {
           if (block.type === 'text') {
             const tokenResult = await this.getTokenCount(
               { type: 'text', text: block.text || '' },
-              usage,
               model,
               'assistant'
             );
@@ -160,17 +152,14 @@ export class TraceProcessor {
       }
     }
     
-    // Process tool definitions if they're new
-    if (pair.request.tools && Array.isArray(pair.request.tools)) {
-      const toolsHash = this.contentHash(pair.request.tools);
-      if (toolsHash !== previousToolsHash) {
-        const { anthropicTools, mcpGroups } = this.groupToolsByMCP(pair.request.tools);
+    // Process tool definitions
+    if (finalPair.request.tools && Array.isArray(finalPair.request.tools)) {
+      const { anthropicTools, mcpGroups } = this.groupToolsByMCP(finalPair.request.tools);
         
         // Add Anthropic tools
         if (anthropicTools.length > 0) {
           const tokenResult = await this.getTokenCount(
             anthropicTools,
-            usage,
             model,
             'tools'
           );
@@ -197,7 +186,6 @@ export class TraceProcessor {
           
           const tokenResult = await this.getTokenCount(
             mcpTools,
-            usage,
             model,
             'mcp_tools'
           );
@@ -217,14 +205,13 @@ export class TraceProcessor {
           });
         }
       }
-    }
     
-    // Process NEW assistant response
-    if (pair.response.content && Array.isArray(pair.response.content)) {
-      for (const contentItem of pair.response.content) {
+    // Process assistant response (only the final response, not history)
+    if (finalPair.response.content && Array.isArray(finalPair.response.content)) {
+      for (const contentItem of finalPair.response.content) {
         if (contentItem.type === 'text') {
           const text = contentItem.text || '';
-          const tokenResult = await this.getTokenCount({ type: 'text', text }, usage, model, 'assistant');
+          const tokenResult = await this.getTokenCount({ type: 'text', text }, model, 'assistant');
           
           if (tokenResult.count > 0) {
             segments.push({
@@ -246,7 +233,6 @@ export class TraceProcessor {
           const toolInput = JSON.stringify(contentItem.input || {});
           const tokenResult = await this.getTokenCount(
             { type: 'tool_use', name: toolName, input: contentItem.input || {} },
-            usage,
             model,
             'tool_use'
           );
@@ -313,7 +299,6 @@ export class TraceProcessor {
 
   private async getTokenCount(
     content: any, 
-    usage: any, 
     model: string, 
     segmentType: string
   ): Promise<{ count: number; isEstimate: boolean }> {
@@ -337,13 +322,15 @@ export class TraceProcessor {
     }
     
     // Fall back to local token counter
-    return this.tokenCounter.getTokenCount(content, usage);
+    return this.tokenCounter.getTokenCount(content);
   }
 
   async processTraceFile(filepath: string): Promise<Segment[]> {
     const segments: Segment[] = [];
     const fileContent = readFileSync(filepath, 'utf-8');
     const lines = fileContent.trim().split('\n');
+    
+    console.log(`Read ${lines.length} lines from file`);
     
     // Parse all raw pairs first
     const rawPairs: RawPair[] = [];
@@ -356,27 +343,39 @@ export class TraceProcessor {
       }
     }
     
+    console.log(`Parsed ${rawPairs.length} raw pairs`);
+    
     // Use library to process pairs into conversations
     const processedPairs = this.conversationProcessor.processRawPairs(rawPairs);
-    const conversations = this.conversationProcessor.mergeConversations(processedPairs);
+    console.log(`Processed ${processedPairs ? processedPairs.length : 0} pairs`);
     
-    // Convert conversations to segments
+    const conversations = this.conversationProcessor.mergeConversations(processedPairs);
+    console.log(`Merged into ${conversations ? conversations.length : 0} conversations`);
+    
+    // Process only the final pair from each conversation to avoid duplication
     for (const conversation of conversations) {
-      const allPairs = conversation.allPairs;
-      
-      // Process each pair chronologically
-      for (let pairIndex = 0; pairIndex < allPairs.length; pairIndex++) {
-        const pair = allPairs[pairIndex];
-        const lineNumber = rawPairs.indexOf(rawPairs.find(rp => 
-          rp.request.timestamp === new Date(pair.timestamp).valueOf() / 1000
-        ) || rawPairs[0]);
-        
-        const model = this.getModelShortName(pair.model);
-        const isPreprocessing = this.isPreprocessingRequest(pair.model, pair.response.usage?.input_tokens || 0);
-        
-        // Add segments from this pair that are NEW (not duplicated from previous pairs)
-        await this.addSegmentsFromPair(segments, pair, pairIndex, allPairs, lineNumber, model, isPreprocessing);
+      if (!conversation || !conversation.finalPair) {
+        console.warn('Skipping conversation with no finalPair');
+        continue;
       }
+      
+      const finalPair = conversation.finalPair;
+      
+      // Find the line number of the final pair in the original trace
+      const lineNumber = rawPairs.findIndex(rp => 
+        rp && rp.request && rp.request.timestamp === new Date(finalPair.timestamp).valueOf() / 1000
+      );
+      
+      if (lineNumber === -1) {
+        console.warn(`Could not find line number for final pair with timestamp ${finalPair.timestamp}`);
+        continue;
+      }
+      
+      const model = this.getModelShortName(finalPair.model);
+      const isPreprocessing = this.isPreprocessingRequest(finalPair.model, finalPair.response?.usage?.input_tokens || 0);
+      
+      // Add all segments from the final pair (contains complete conversation)
+      await this.addSegmentsFromConversation(segments, finalPair, lineNumber, model, isPreprocessing);
     }
 
 

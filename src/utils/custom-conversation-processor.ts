@@ -155,6 +155,9 @@ export class CustomConversationProcessor extends SharedConversationProcessor {
   }
 
   private customHashString(str: string): string {
+    if (!str || typeof str !== 'string') {
+      return '0';
+    }
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);

@@ -1007,8 +1007,34 @@ export class VerticalVisualizer {
                 
                 barsContainer.innerHTML = newBarsHTML;
             } else {
-                // Restore original bars
-                barsContainer.innerHTML = originalBarsHTML;
+                // Regenerate bars without MCP grouping but with preprocessing filter
+                let newBarsHTML = '<div class="grid-lines"></div>';
+                let currentTurnNum = -1;
+                
+                for (const segment of filteredSegments) {
+                    if (segment.turn !== currentTurnNum) {
+                        currentTurnNum = segment.turn;
+                        newBarsHTML += '<div class="turn-marker">Turn ' + currentTurnNum + '</div>\\n';
+                    }
+                    
+                    const classes = [
+                        'segment-bar',
+                        'type-' + segment.type,
+                        segment.isNew ? 'is-new' : '',
+                        segment.isPreprocessing ? 'is-preprocessing' : ''
+                    ].filter(c => c).join(' ');
+                    
+                    const tokenLabel = segment.tokensEstimated ? '~' : '';
+                    const label = segment.displayName + ' (' + tokenLabel + segment.tokens.toLocaleString() + ' tokens)';
+                    
+                    const initialWidth = 50; // Initial width percentage
+                    
+                    newBarsHTML += '<div class="' + classes + '" data-tokens="' + segment.tokens + '" style="width: ' + initialWidth + '%;" title="' + escapeHtml(segment.content || '') + '">' +
+                        '<span class="segment-label">' + escapeHtml(label) + '</span>' +
+                      '</div>\\n';
+                }
+                
+                barsContainer.innerHTML = newBarsHTML;
             }
             
             // Redraw grid lines after updating bars
