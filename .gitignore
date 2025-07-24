@@ -32,5 +32,13 @@ coverage/
 *.jsonl
 *.html
 
-# Segments files are ok to keep
-!*.segments.json
+# Segments files
+*.segments.json
+*.segments.json.backup
+
+# Library code (installed via npm)
+lib/
+
+# Test files
+test_tools.js
+compare-visualizations.js
