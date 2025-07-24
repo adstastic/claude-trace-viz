@@ -174,17 +174,59 @@ export class VerticalVisualizer {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Claude Trace Vertical Visualization</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/charts.css/dist/charts.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
-        * {
-            box-sizing: border-box;
+        /* Timeline bar styles */
+        .segment-bar {
+            @apply rounded transition-all duration-200 flex items-center px-3 mb-1 text-white text-sm font-medium;
+            height: 36px;
         }
         
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 20px;
-            background: #002b36; /* base03 */
-            color: #839496; /* base0 */
+        .segment-bar:hover {
+            transform: translateX(2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Token type colors */
+        .type-user { @apply bg-emerald-500; }
+        .type-system { @apply bg-violet-500; }
+        .type-assistant { @apply bg-blue-500; }
+        .type-tools { @apply bg-pink-500; }
+        .type-mcp_tools { @apply bg-red-500; }
+        .type-tool_use { @apply bg-amber-500; }
+        
+        /* Preprocessing pattern */
+        .is-preprocessing {
+            opacity: 0.7;
+            background-image: repeating-linear-gradient(
+                -45deg,
+                transparent,
+                transparent 6px,
+                rgba(255, 255, 255, 0.2) 6px,
+                rgba(255, 255, 255, 0.2) 12px
+            );
+        }
+        
+        /* Grid styling */
+        #bars {
+            padding-top: 2rem;
+            margin-top: 1rem;
+        }
+        
+        .grid-line {
+            @apply absolute top-0 bottom-0 w-px bg-gray-200;
+        }
+        
+        .grid-label {
+            @apply absolute text-xs text-gray-500;
+            top: -1.5rem;
+            transform: translateX(-50%);
+        }
+        
+        .turn-marker {
+            @apply text-xs font-semibold text-gray-600 mt-3 mb-1;
         }
         
         h1 {
@@ -472,95 +514,127 @@ export class VerticalVisualizer {
         
     </style>
 </head>
-<body>
-    <div class="controls">
-        <div class="control-item">
-            <input type="checkbox" id="logScale" checked onchange="updateVisualization()">
-            <label for="logScale">Log scale</label>
-        </div>
-        <div class="control-item">
-            <input type="checkbox" id="groupMCPs" onchange="updateVisualization()">
-            <label for="groupMCPs">Group MCPs</label>
-        </div>
-    </div>
-    
-    <h1>Claude Trace Vertical Visualization</h1>
-    
-    <div class="stats">
-        Total tokens: ${stats.totalTokens.toLocaleString()} (${((stats.totalTokens / maxTokens) * 100).toFixed(1)}% of ${maxTokens.toLocaleString()} context)
-        ${stats.preprocessingTokens > 0 ? `<br>Preprocessing tokens: ${stats.preprocessingTokens.toLocaleString()} (not counted in total)` : ''}
-    </div>
-    
-    <div class="legend">
-        <div class="legend-item">
-            <div class="legend-dot type-user"></div>
-            <span>User</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-dot type-system"></div>
-            <span>System</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-dot type-assistant"></div>
-            <span>Assistant</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-dot type-tools"></div>
-            <span>Anthropic Tools</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-dot type-mcp_tools"></div>
-            <span>MCP Tools</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-dot type-tool_use"></div>
-            <span>Tool Use</span>
+<body class="min-h-screen bg-gray-50 p-6">
+    <!-- Controls -->
+    <div class="fixed top-6 right-6 bg-white rounded-lg shadow-md p-4 z-10">
+        <div class="space-y-2">
+            <label class="flex items-center space-x-2 cursor-pointer">
+                <input type="checkbox" id="logScale" checked onchange="updateVisualization()" class="form-checkbox h-4 w-4 text-blue-600">
+                <span class="text-sm text-gray-700">Log scale</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer">
+                <input type="checkbox" id="groupMCPs" onchange="updateVisualization()" class="form-checkbox h-4 w-4 text-blue-600">
+                <span class="text-sm text-gray-700">Group MCPs</span>
+            </label>
         </div>
     </div>
     
-    <div class="stats-grid">
-        <div class="stat-section">
-            <h3>Token Distribution by Type</h3>
-            <div class="pie-chart-container" id="type-pie-chart"></div>
-        </div>
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-4">Claude Trace Visualization</h1>
         
-        <div class="stat-section">
-            <h3>Token Distribution by Model</h3>
-            <div class="pie-chart-container" id="model-pie-chart"></div>
-        </div>
-        
-        ${topMcps.length > 0 ? `
-        <div class="stat-section">
-            <h3>Top MCP Tools by Tokens</h3>
-            ${topMcps.map(([mcp, tokens]) => {
-                const percentage = (tokens / stats.totalTokens * 100).toFixed(1);
-                return `
-                <div class="stat-row">
-                    <div class="stat-header">
-                        <span class="stat-label">${mcp}</span>
-                        <span class="stat-value">${tokens.toLocaleString()} (${percentage}%)</span>
-                    </div>
-                    <div class="stat-bar">
-                        <div class="stat-bar-fill type-bar-mcp_tools" style="width: ${percentage}%"></div>
-                    </div>
-                </div>
-            `;}).join('')}
-        </div>
-        ` : ''}
-    </div>
-    
-    <div id="visualization-container">
-        <div id="bars">
-            <div class="grid-lines">
-                ${gridLinesHTML}
+        <div class="bg-white rounded-lg shadow-sm p-4 mb-6">
+            <div class="text-sm text-gray-600">
+                <span class="font-semibold text-gray-900">${stats.totalTokens.toLocaleString()}</span> total tokens
+                <span class="text-gray-400 mx-2">•</span>
+                <span class="font-semibold text-gray-900">${((stats.totalTokens / maxTokens) * 100).toFixed(1)}%</span> of ${maxTokens.toLocaleString()} context
+                ${stats.preprocessingTokens > 0 ? `
+                <span class="text-gray-400 mx-2">•</span>
+                <span class="text-gray-500">${stats.preprocessingTokens.toLocaleString()} preprocessing tokens</span>` : ''}
             </div>
-            ${barsHTML}
         </div>
-    </div>
-    
-    <div class="preprocessing-note">
-        * Bars with crosshatch pattern represent preprocessing requests (not counted in main token total)<br>
-        * Token counts marked with ~ are estimates
+        
+            <!-- Legend -->
+            <div class="flex items-center gap-4">
+                <span class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded bg-emerald-500"></span>
+                    <span class="text-xs text-gray-600">User</span>
+                </span>
+                <span class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded bg-violet-500"></span>
+                    <span class="text-xs text-gray-600">System</span>
+                </span>
+                <span class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded bg-blue-500"></span>
+                    <span class="text-xs text-gray-600">Assistant</span>
+                </span>
+                <span class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded bg-pink-500"></span>
+                    <span class="text-xs text-gray-600">Anthropic Tools</span>
+                </span>
+                <span class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded bg-red-500"></span>
+                    <span class="text-xs text-gray-600">MCP Tools</span>
+                </span>
+                <span class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded bg-amber-500"></span>
+                    <span class="text-xs text-gray-600">Tool Use</span>
+                </span>
+            </div>
+        </div>
+        
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <!-- Token Distribution by Type -->
+            <div class="bg-white rounded-lg shadow-sm p-4">
+                <h3 class="text-sm font-semibold text-gray-700 mb-3">Token Distribution by Type</h3>
+                <div id="type-pie-chart" class="flex items-center"></div>
+            </div>
+            
+            <!-- Token Distribution by Model -->
+            <div class="bg-white rounded-lg shadow-sm p-4">
+                <h3 class="text-sm font-semibold text-gray-700 mb-3">Token Distribution by Model</h3>
+                <div class="space-y-2">
+                    ${Object.entries(stats.modelTokens)
+                        .sort(([, a], [, b]) => b - a)
+                        .map(([model, tokens]) => {
+                            const totalWithPreprocessing = stats.totalTokens + stats.preprocessingTokens;
+                            const percentage = ((tokens / totalWithPreprocessing) * 100).toFixed(1);
+                            return `
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-gray-900">${model}</span>
+                        <span class="text-sm text-gray-600">${tokens.toLocaleString()} (${percentage}%)</span>
+                    </div>
+                    `;}).join('')}
+                </div>
+            </div>
+            
+            ${topMcps.length > 0 ? `
+            <!-- Top MCP Tools -->
+            <div class="bg-white rounded-lg shadow-sm p-4">
+                <h3 class="text-sm font-semibold text-gray-700 mb-3">Top MCP Tools</h3>
+                <div class="space-y-2">
+                    ${topMcps.slice(0, 5).map(([mcp, tokens]) => {
+                        const percentage = (tokens / stats.totalTokens * 100).toFixed(1);
+                        return `
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-gray-600">${mcp}</span>
+                        <div class="flex items-center gap-2">
+                            <div class="w-24 bg-gray-200 rounded-full h-2">
+                                <div class="bg-red-500 h-2 rounded-full" style="width: ${percentage}%"></div>
+                            </div>
+                            <span class="text-xs font-medium text-gray-700 w-12 text-right">${percentage}%</span>
+                        </div>
+                    </div>
+                    `;}).join('')}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+        
+        <!-- Timeline Visualization -->
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div id="bars" class="relative">
+                <div class="grid-lines">
+                    ${gridLinesHTML}
+                </div>
+                ${barsHTML}
+            </div>
+        </div>
+        
+        <div class="text-xs text-gray-500 mt-4 space-y-1">
+            <p>• Bars with diagonal stripes represent preprocessing requests (not counted in main total)</p>
+            <p>• Token counts marked with ~ are estimates</p>
+        </div>
     </div>
     
     <script>
@@ -573,29 +647,31 @@ export class VerticalVisualizer {
         const segments = ${JSON.stringify(segments)};
         const stats = ${JSON.stringify(stats)};
         
-        // Colors for the pie charts
+        // Colors for the pie charts (matching Tailwind classes)
         const typeColors = {
-            'user': '#859900',      // green
-            'system': '#6c71c4',    // violet
-            'assistant': '#268bd2', // blue
-            'tools': '#d33682',     // magenta
-            'mcp_tools': '#dc322f', // red
-            'tool_use': '#cb4b16'   // orange
+            'user': '#10b981',      // emerald-500
+            'system': '#8b5cf6',    // violet-500
+            'assistant': '#3b82f6', // blue-500
+            'tools': '#ec4899',     // pink-500
+            'mcp_tools': '#ef4444', // red-500
+            'tool_use': '#f59e0b',  // amber-500
+            'other': '#6b7280'      // gray-500
         };
         
-        // Solarized colors not used in the legend
+        // Model colors
         const modelColors = [
-            '#b58900', // yellow
-            '#2aa198', // cyan
-            '#93a1a1', // base1
-            '#657b83', // base00
-            '#839496'  // base0
+            '#eab308', // yellow-500
+            '#06b6d4', // cyan-500
+            '#8b5cf6', // violet-500
+            '#ec4899', // pink-500
+            '#f59e0b'  // amber-500
         ];
         
         function createPieChart(containerId, data, colors, isTypeChart = false) {
-            const width = 180;
-            const height = 180;
-            const radius = Math.min(width, height) / 2 - 10;
+            // Compact pie charts
+            const width = 120;
+            const height = 120;
+            const radius = Math.min(width, height) / 2;
             
             // Clear any existing chart
             d3.select(containerId).selectAll("*").remove();
@@ -604,21 +680,18 @@ export class VerticalVisualizer {
             const tooltip = d3.select("body").append("div")
                 .attr("class", "tooltip");
             
-            // Create SVG container
-            const svgContainer = d3.select(containerId)
-                .append("div");
-            
-            const svg = svgContainer
+            // Create SVG for pie chart
+            const svg = d3.select(containerId)
                 .append("svg")
                 .attr("width", width)
                 .attr("height", height)
                 .append("g")
                 .attr("transform", \`translate(\${width / 2}, \${height / 2})\`);
             
-            // Create legend container
+            // Create legend container beside the pie chart
             const legendContainer = d3.select(containerId)
                 .append("div")
-                .attr("class", "pie-legend");
+                .attr("class", "text-xs space-y-1 ml-4 flex-1");
             
             const pie = d3.pie()
                 .sort(null)
@@ -642,13 +715,13 @@ export class VerticalVisualizer {
                         return modelColors[i % modelColors.length];
                     }
                 })
-                .attr("stroke", "#002b36")
-                .attr("stroke-width", 2)
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 1)
                 .on("mouseover", function(event, d) {
                     tooltip.transition()
                         .duration(200)
                         .style("opacity", .9);
-                    tooltip.html(\`<strong>\${d.data.label}</strong><br/>\${d.data.value.toLocaleString()} tokens (\${d.data.percentage}%)\`)
+                    tooltip.html(\`\${d.data.label}: \${d.data.value.toLocaleString()} tokens (\${d.data.percentage}%)\`)
                         .style("left", (event.pageX + 10) + "px")
                         .style("top", (event.pageY - 28) + "px");
                 })
@@ -667,24 +740,20 @@ export class VerticalVisualizer {
                 .style("font-weight", "bold")
                 .text(d => d.data.percentage >= 5 ? \`\${d.data.percentage}%\` : "");
             
-            // Add legend
+            // Add legend with compact spacing
             data.forEach((item, i) => {
                 const legendItem = legendContainer.append("div")
-                    .attr("class", "pie-legend-item");
+                    .attr("class", "flex items-center gap-1.5 py-0.5");
                 
                 legendItem.append("div")
-                    .attr("class", "pie-legend-color")
+                    .attr("class", "w-2 h-2 rounded-full flex-shrink-0")
                     .style("background-color", isTypeChart ? 
-                        (typeColors[item.name] || '#586e75') : 
+                        (typeColors[item.name] || '#6b7280') : 
                         modelColors[i % modelColors.length]);
                 
                 legendItem.append("span")
-                    .attr("class", "pie-legend-label")
-                    .text(item.label);
-                
-                legendItem.append("span")
-                    .attr("class", "pie-legend-value")
-                    .text(\` \${item.value.toLocaleString()} (\${item.percentage}%)\`);
+                    .attr("class", "text-gray-600 text-xs leading-tight")
+                    .text(\`\${item.label} \${item.percentage}%\`);
             });
         }
         
@@ -921,9 +990,8 @@ export class VerticalVisualizer {
                 }))
                 .sort((a, b) => b.value - a.value);
             
-            // Create the pie charts
+            // Create the pie chart for type distribution only
             createPieChart('#type-pie-chart', typeData, typeColors, true);
-            createPieChart('#model-pie-chart', modelData, modelColors, false);
         });
         
         function formatTypeName(type) {
