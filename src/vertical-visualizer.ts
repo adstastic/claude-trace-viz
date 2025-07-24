@@ -10,7 +10,8 @@ export class VerticalVisualizer {
     modelTokens: {},
     mcpTokens: {},
     modelMcpTokens: {},
-    preprocessingTokens: 0
+    preprocessingTokens: 0,
+    allModelTokens: {} // Track all models including preprocessing
   };
   private traceFilePath: string = '';
 
@@ -62,11 +63,19 @@ export class VerticalVisualizer {
       modelTokens: {},
       mcpTokens: {},
       modelMcpTokens: {},
-      preprocessingTokens: 0
+      preprocessingTokens: 0,
+      allModelTokens: {}
     };
 
     for (const segment of segments) {
       const tokens = segment.tokens;
+      const model = segment.model;
+      
+      // Track all models (including preprocessing)
+      if (!this.statistics.allModelTokens[model]) {
+        this.statistics.allModelTokens[model] = 0;
+      }
+      this.statistics.allModelTokens[model] += tokens;
       
       // Don't count preprocessing tokens in main total
       if (!segment.isPreprocessing) {
@@ -75,22 +84,24 @@ export class VerticalVisualizer {
         this.statistics.preprocessingTokens += tokens;
       }
       
-      // Type tokens
-      const type = segment.type;
-      if (!this.statistics.typeTokens[type]) {
-        this.statistics.typeTokens[type] = 0;
+      // Only count non-preprocessing segments in type and model stats
+      if (!segment.isPreprocessing) {
+        // Type tokens
+        const type = segment.type;
+        if (!this.statistics.typeTokens[type]) {
+          this.statistics.typeTokens[type] = 0;
+        }
+        this.statistics.typeTokens[type] += tokens;
+        
+        // Model tokens (for percentage calculation)
+        if (!this.statistics.modelTokens[model]) {
+          this.statistics.modelTokens[model] = 0;
+        }
+        this.statistics.modelTokens[model] += tokens;
       }
-      this.statistics.typeTokens[type] += tokens;
       
-      // Model tokens
-      const model = segment.model;
-      if (!this.statistics.modelTokens[model]) {
-        this.statistics.modelTokens[model] = 0;
-      }
-      this.statistics.modelTokens[model] += tokens;
-      
-      // MCP tokens
-      if (segment.type === 'mcp_tools' && segment.displayName) {
+      // MCP tokens (only for non-preprocessing)
+      if (!segment.isPreprocessing && segment.type === 'mcp_tools' && segment.displayName) {
         const mcpName = segment.displayName.replace('MCP: ', '');
         if (!this.statistics.mcpTokens[mcpName]) {
           this.statistics.mcpTokens[mcpName] = 0;
@@ -98,6 +109,7 @@ export class VerticalVisualizer {
         this.statistics.mcpTokens[mcpName] += tokens;
         
         // Model-specific MCP tokens
+        const model = segment.model;
         if (!this.statistics.modelMcpTokens[model]) {
           this.statistics.modelMcpTokens[model] = {};
         }
@@ -174,9 +186,7 @@ export class VerticalVisualizer {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Claude Trace Vertical Visualization</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/charts.css/dist/charts.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         /* Timeline bar styles */
         .segment-bar {
@@ -515,24 +525,12 @@ export class VerticalVisualizer {
     </style>
 </head>
 <body class="min-h-screen bg-gray-50 p-6">
-    <!-- Controls -->
-    <div class="fixed top-6 right-6 bg-white rounded-lg shadow-md p-4 z-10">
-        <div class="space-y-2">
-            <label class="flex items-center space-x-2 cursor-pointer">
-                <input type="checkbox" id="logScale" checked onchange="updateVisualization()" class="form-checkbox h-4 w-4 text-blue-600">
-                <span class="text-sm text-gray-700">Log scale</span>
-            </label>
-            <label class="flex items-center space-x-2 cursor-pointer">
-                <input type="checkbox" id="groupMCPs" onchange="updateVisualization()" class="form-checkbox h-4 w-4 text-blue-600">
-                <span class="text-sm text-gray-700">Group MCPs</span>
-            </label>
-        </div>
-    </div>
-    
     <div class="max-w-7xl mx-auto">
+        <!-- Header -->
         <h1 class="text-3xl font-bold text-gray-900 mb-4">Claude Trace Visualization</h1>
         
-        <div class="bg-white rounded-lg shadow-sm p-4 mb-6">
+        <!-- Summary Stats -->
+        <div class="bg-white rounded-lg shadow-sm p-3 mb-4">
             <div class="text-sm text-gray-600">
                 <span class="font-semibold text-gray-900">${stats.totalTokens.toLocaleString()}</span> total tokens
                 <span class="text-gray-400 mx-2">•</span>
@@ -540,80 +538,62 @@ export class VerticalVisualizer {
                 ${stats.preprocessingTokens > 0 ? `
                 <span class="text-gray-400 mx-2">•</span>
                 <span class="text-gray-500">${stats.preprocessingTokens.toLocaleString()} preprocessing tokens</span>` : ''}
+                ${Object.entries(stats.allModelTokens).length > 0 ? `
+                <span class="text-gray-400 mx-2">•</span>
+                ${Object.entries(stats.allModelTokens)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([model, tokens]) => {
+                        const percentage = ((tokens / (stats.totalTokens + stats.preprocessingTokens)) * 100).toFixed(1);
+                        return `<span class="text-gray-700">${model}: ${tokens.toLocaleString()} (${percentage}%)</span>`;
+                    }).join(' / ')}
+                ` : ''}
             </div>
         </div>
         
-            <!-- Legend -->
-            <div class="flex items-center gap-4">
-                <span class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded bg-emerald-500"></span>
-                    <span class="text-xs text-gray-600">User</span>
-                </span>
-                <span class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded bg-violet-500"></span>
-                    <span class="text-xs text-gray-600">System</span>
-                </span>
-                <span class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded bg-blue-500"></span>
-                    <span class="text-xs text-gray-600">Assistant</span>
-                </span>
-                <span class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded bg-pink-500"></span>
-                    <span class="text-xs text-gray-600">Anthropic Tools</span>
-                </span>
-                <span class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded bg-red-500"></span>
-                    <span class="text-xs text-gray-600">MCP Tools</span>
-                </span>
-                <span class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded bg-amber-500"></span>
-                    <span class="text-xs text-gray-600">Tool Use</span>
-                </span>
-            </div>
-        </div>
-        
-        <!-- Stats Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <!-- Token Distribution by Type -->
-            <div class="bg-white rounded-lg shadow-sm p-4">
-                <h3 class="text-sm font-semibold text-gray-700 mb-3">Token Distribution by Type</h3>
-                <div id="type-pie-chart" class="flex items-center"></div>
-            </div>
-            
-            <!-- Token Distribution by Model -->
-            <div class="bg-white rounded-lg shadow-sm p-4">
-                <h3 class="text-sm font-semibold text-gray-700 mb-3">Token Distribution by Model</h3>
-                <div class="space-y-2">
-                    ${Object.entries(stats.modelTokens)
+        <!-- Compact Stats Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <!-- Token Distribution (horizontal bars) -->
+            <div class="bg-white rounded-lg shadow-sm px-4 py-3">
+                <h4 class="text-xs font-semibold text-gray-700 mb-2">Token Distribution</h4>
+                <div class="space-y-1">
+                    ${Object.entries(stats.typeTokens)
                         .sort(([, a], [, b]) => b - a)
-                        .map(([model, tokens]) => {
-                            const totalWithPreprocessing = stats.totalTokens + stats.preprocessingTokens;
-                            const percentage = ((tokens / totalWithPreprocessing) * 100).toFixed(1);
+                        .map(([type, tokens]) => {
+                            const percentage = ((tokens / stats.totalTokens) * 100).toFixed(1);
+                            const colors: Record<string, string> = {
+                                'mcp_tools': 'bg-red-500',
+                                'tools': 'bg-pink-500',
+                                'system': 'bg-violet-500',
+                                'tool_use': 'bg-amber-500',
+                                'assistant': 'bg-blue-500',
+                                'user': 'bg-emerald-500'
+                            };
                             return `
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm font-medium text-gray-900">${model}</span>
-                        <span class="text-sm text-gray-600">${tokens.toLocaleString()} (${percentage}%)</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-gray-600 w-20">${this.formatTypeName(type)}</span>
+                        <div class="flex-1 bg-gray-100 rounded-full h-3 relative">
+                            <div class="${colors[type] || 'bg-gray-500'} h-3 rounded-full" style="width: ${percentage}%"></div>
+                        </div>
+                        <span class="text-xs text-gray-500 w-10 text-right">${percentage}%</span>
                     </div>
                     `;}).join('')}
                 </div>
             </div>
             
             ${topMcps.length > 0 ? `
-            <!-- Top MCP Tools -->
-            <div class="bg-white rounded-lg shadow-sm p-4">
-                <h3 class="text-sm font-semibold text-gray-700 mb-3">Top MCP Tools</h3>
-                <div class="space-y-2">
-                    ${topMcps.slice(0, 5).map(([mcp, tokens]) => {
+            <!-- MCP Tools (horizontal bars) -->
+            <div class="bg-white rounded-lg shadow-sm px-4 py-3">
+                <h4 class="text-xs font-semibold text-gray-700 mb-2">MCP Tools</h4>
+                <div class="space-y-1">
+                    ${topMcps.slice(0, 4).map(([mcp, tokens]) => {
                         const percentage = (tokens / stats.totalTokens * 100).toFixed(1);
                         return `
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs text-gray-600">${mcp}</span>
-                        <div class="flex items-center gap-2">
-                            <div class="w-24 bg-gray-200 rounded-full h-2">
-                                <div class="bg-red-500 h-2 rounded-full" style="width: ${percentage}%"></div>
-                            </div>
-                            <span class="text-xs font-medium text-gray-700 w-12 text-right">${percentage}%</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-gray-600 w-32">${mcp}</span>
+                        <div class="flex-1 bg-gray-100 rounded-full h-3 relative">
+                            <div class="bg-red-500 h-3 rounded-full" style="width: ${(tokens / topMcps[0][1] * 100).toFixed(0)}%"></div>
                         </div>
+                        <span class="text-xs text-gray-500 w-10 text-right">${percentage}%</span>
                     </div>
                     `;}).join('')}
                 </div>
@@ -622,7 +602,53 @@ export class VerticalVisualizer {
         </div>
         
         <!-- Timeline Visualization -->
-        <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="bg-white rounded-lg shadow-sm p-6 relative">
+            <!-- Floating checkboxes at scale level -->
+            <div class="absolute" style="top: -20px; left: 20px; z-index: 10;">
+                <div class="flex gap-4">
+                    <label class="flex items-center space-x-1 cursor-pointer bg-white/90 px-2 py-1 rounded">
+                        <input type="checkbox" id="logScale" checked onchange="updateVisualization()" class="h-3 w-3 text-blue-600 rounded">
+                        <span class="text-xs text-gray-700">Log scale</span>
+                    </label>
+                    <label class="flex items-center space-x-1 cursor-pointer bg-white/90 px-2 py-1 rounded">
+                        <input type="checkbox" id="groupMCPs" onchange="updateVisualization()" class="h-3 w-3 text-blue-600 rounded">
+                        <span class="text-xs text-gray-700">Group MCPs</span>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Floating legend below scale on the right -->
+            <div class="absolute" style="top: 10px; right: 20px; z-index: 10;">
+                <div class="bg-white/90 px-3 py-2 rounded">
+                    <div class="flex flex-col gap-1">
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-emerald-500"></span>
+                            <span class="text-xs text-gray-600">User</span>
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-violet-500"></span>
+                            <span class="text-xs text-gray-600">System</span>
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-blue-500"></span>
+                            <span class="text-xs text-gray-600">Assistant</span>
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-pink-500"></span>
+                            <span class="text-xs text-gray-600">Anthropic Tools</span>
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-red-500"></span>
+                            <span class="text-xs text-gray-600">MCP Tools</span>
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-amber-500"></span>
+                            <span class="text-xs text-gray-600">Tool Use</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
             <div id="bars" class="relative">
                 <div class="grid-lines">
                     ${gridLinesHTML}
@@ -657,6 +683,7 @@ export class VerticalVisualizer {
             'tool_use': '#f59e0b',  // amber-500
             'other': '#6b7280'      // gray-500
         };
+        
         
         // Model colors
         const modelColors = [
@@ -946,53 +973,6 @@ export class VerticalVisualizer {
             }
         }
         
-        // Initialize pie charts on page load
-        window.addEventListener('DOMContentLoaded', function() {
-            // Prepare data for type distribution pie chart
-            const typeDataRaw = Object.entries(stats.typeTokens)
-                .map(([type, tokens]) => ({
-                    name: type,
-                    label: formatTypeName(type),
-                    value: tokens,
-                    percentage: ((tokens / stats.totalTokens) * 100).toFixed(1)
-                }))
-                .sort((a, b) => b.value - a.value);
-            
-            // Group small slices into "Other"
-            const typeData = [];
-            let otherValue = 0;
-            
-            for (const item of typeDataRaw) {
-                if (parseFloat(item.percentage) >= 5) {
-                    typeData.push(item);
-                } else {
-                    otherValue += item.value;
-                }
-            }
-            
-            if (otherValue > 0) {
-                typeData.push({
-                    name: 'other',
-                    label: 'Other',
-                    value: otherValue,
-                    percentage: ((otherValue / stats.totalTokens) * 100).toFixed(1)
-                });
-            }
-            
-            // Prepare data for model distribution pie chart
-            const totalWithPreprocessing = stats.totalTokens + stats.preprocessingTokens;
-            const modelData = Object.entries(stats.modelTokens)
-                .map(([model, tokens]) => ({
-                    name: model,
-                    label: model,
-                    value: tokens,
-                    percentage: ((tokens / totalWithPreprocessing) * 100).toFixed(1)
-                }))
-                .sort((a, b) => b.value - a.value);
-            
-            // Create the pie chart for type distribution only
-            createPieChart('#type-pie-chart', typeData, typeColors, true);
-        });
         
         function formatTypeName(type) {
             const typeNames = {

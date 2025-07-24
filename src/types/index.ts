@@ -29,6 +29,7 @@ export interface Statistics {
   mcpTokens: Record<string, number>;
   modelMcpTokens: Record<string, Record<string, number>>;
   preprocessingTokens: number;
+  allModelTokens: Record<string, number>;
 }
 
 export interface VisualizationOptions {
