@@ -190,6 +190,8 @@ export class VerticalVisualizer {
         h1 {
             color: #93a1a1; /* base1 */
             margin-bottom: 10px;
+            font-size: 28px;
+            font-weight: 600;
         }
         
         .stats {
@@ -246,7 +248,7 @@ export class VerticalVisualizer {
             bottom: 0;
             width: 1px;
             background: #586e75; /* base01 */
-            opacity: 0.2;
+            opacity: 0.4;
         }
         
         .grid-label {
@@ -296,13 +298,13 @@ export class VerticalVisualizer {
         }
         
         .is-preprocessing {
-            opacity: 0.5;
+            opacity: 0.6;
             background-image: repeating-linear-gradient(
                 -45deg,
                 transparent,
-                transparent 5px,
-                rgba(0, 0, 0, 0.2) 5px,
-                rgba(0, 0, 0, 0.2) 10px
+                transparent 8px,
+                rgba(0, 0, 0, 0.3) 8px,
+                rgba(0, 0, 0, 0.3) 16px
             );
         }
         
@@ -315,9 +317,9 @@ export class VerticalVisualizer {
         
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
         }
         
         .stat-section {
@@ -373,9 +375,10 @@ export class VerticalVisualizer {
         
         .pie-chart-container {
             display: flex;
-            align-items: flex-start;
+            align-items: center;
+            justify-content: center;
             position: relative;
-            gap: 10px;
+            gap: 5px;
         }
         
         .pie-legend {
@@ -400,11 +403,11 @@ export class VerticalVisualizer {
         }
         
         .pie-legend-label {
-            color: #839496; /* base0 */
+            color: #93a1a1; /* base1 - increased contrast */
         }
         
         .pie-legend-value {
-            color: #657b83; /* base00 */
+            color: #839496; /* base0 - increased contrast */
             font-size: 9px;
         }
         
@@ -877,7 +880,7 @@ export class VerticalVisualizer {
         // Initialize pie charts on page load
         window.addEventListener('DOMContentLoaded', function() {
             // Prepare data for type distribution pie chart
-            const typeData = Object.entries(stats.typeTokens)
+            const typeDataRaw = Object.entries(stats.typeTokens)
                 .map(([type, tokens]) => ({
                     name: type,
                     label: formatTypeName(type),
@@ -885,6 +888,27 @@ export class VerticalVisualizer {
                     percentage: ((tokens / stats.totalTokens) * 100).toFixed(1)
                 }))
                 .sort((a, b) => b.value - a.value);
+            
+            // Group small slices into "Other"
+            const typeData = [];
+            let otherValue = 0;
+            
+            for (const item of typeDataRaw) {
+                if (parseFloat(item.percentage) >= 5) {
+                    typeData.push(item);
+                } else {
+                    otherValue += item.value;
+                }
+            }
+            
+            if (otherValue > 0) {
+                typeData.push({
+                    name: 'other',
+                    label: 'Other',
+                    value: otherValue,
+                    percentage: ((otherValue / stats.totalTokens) * 100).toFixed(1)
+                });
+            }
             
             // Prepare data for model distribution pie chart
             const totalWithPreprocessing = stats.totalTokens + stats.preprocessingTokens;
