@@ -31,12 +31,14 @@ coverage/
 # Trace files (too large for git)
 *.jsonl
 *.html
+.claude-trace/
 
 # Segments files
 *.segments.json
 *.segments.json.backup
 
-# Library code (installed via npm)
+# Library code
+lib/
 
 
 # Test files
