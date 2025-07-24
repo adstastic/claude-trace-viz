@@ -38,28 +38,13 @@ export class CustomConversationProcessor extends SharedConversationProcessor {
       // Group pairs by conversation thread
       const conversationThreads = new Map<string, ProcessedPair[]>();
 
-      for (const pair of sortedPairs) {
-        const messages = pair.request.messages || [];
-        if (messages.length === 0) continue;
-
-        // Use message count as part of the key to group growing conversations
-        const messageCount = messages.length;
-        const conversationKey = JSON.stringify({ 
-          messageCount: Math.floor(messageCount / 2) * 2, // Group by pairs of messages
-          systemHash: this.customHashString(JSON.stringify(pair.request.system))
-        });
-
-        if (!conversationThreads.has(conversationKey)) {
-          conversationThreads.set(conversationKey, []);
-        }
-        conversationThreads.get(conversationKey)!.push(pair);
-      }
-
-      // Merge conversation threads that are continuations
-      const mergedThreads = this.mergeRelatedThreads(conversationThreads);
+      // All pairs with the same system prompt should be in one conversation
+      // since we're already grouping by system prompt above
+      const conversationKey = 'main-conversation';
+      conversationThreads.set(conversationKey, sortedPairs);
 
       // For each conversation thread, keep the final pair
-      for (const threadPairs of mergedThreads.values()) {
+      for (const threadPairs of conversationThreads.values()) {
         const sortedThreadPairs = [...threadPairs].sort(
           (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
         );

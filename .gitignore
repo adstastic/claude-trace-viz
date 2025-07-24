@@ -37,7 +37,7 @@ coverage/
 *.segments.json.backup
 
 # Library code (installed via npm)
-lib/
+
 
 # Test files
 test_tools.js

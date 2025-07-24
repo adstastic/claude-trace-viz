@@ -132,6 +132,14 @@ export class VerticalVisualizer {
     let currentTurn = -1;
     
     for (const segment of segments) {
+      // Handle compaction markers specially
+      if (segment.isCompaction) {
+        barsHTML += `<div class="compaction-marker">
+          <span class="compaction-text">═══ Conversation Compacted ═══</span>
+        </div>\n`;
+        continue;
+      }
+      
       // Add turn marker if new turn
       if (segment.turn !== currentTurn) {
         currentTurn = segment.turn;
@@ -148,6 +156,7 @@ export class VerticalVisualizer {
         'segment-bar',
         `type-${segment.type}`,
         segment.isNew ? 'is-new' : '',
+        segment.isRepeated ? 'is-repeated' : '',
         segment.isPreprocessing ? 'is-preprocessing' : ''
       ].filter(c => c).join(' ');
       
@@ -461,6 +470,21 @@ export class VerticalVisualizer {
             box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.4);
         }
         
+        .is-repeated {
+            opacity: 0.5 !important;
+            position: relative;
+        }
+        
+        .is-repeated::after {
+            content: '↺';
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px;
+        }
+        
         .is-preprocessing {
             opacity: 0.7 !important;
             background-image: repeating-linear-gradient(
@@ -481,6 +505,22 @@ export class VerticalVisualizer {
         
         .turn-marker:first-child {
             margin-top: -20px;
+        }
+        
+        .compaction-marker {
+            margin: 20px 0;
+            padding: 15px;
+            background: var(--base01);
+            border-radius: 6px;
+            text-align: center;
+            border: 2px dashed var(--orange);
+        }
+        
+        .compaction-text {
+            color: var(--orange);
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: 1px;
         }
         
         .stats-grid {
@@ -789,10 +829,18 @@ export class VerticalVisualizer {
         <div class="footer-notes space-y-1">
             <p>• Bars with diagonal stripes represent preprocessing requests (not counted in main total)</p>
             <p>• Token counts marked with ~ are estimates</p>
+            <p>• Bars with white borders are new content in that turn</p>
+            <p>• Faded bars with ↺ symbol are repeated content from previous turns</p>
         </div>
     </div>
     
     <script>
+        // Global error handler
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            console.error('JavaScript error:', msg, 'at line:', lineNo);
+            return false;
+        };
+        
         const maxSegmentTokens = ${maxSegmentTokens};
         const minWidthPercent = ${minWidthPercent};
         const maxWidthPercent = ${maxWidthPercent};
@@ -914,14 +962,18 @@ export class VerticalVisualizer {
         }
         
         function updateVisualization() {
-            const logScale = document.getElementById('logScale').checked;
-            const groupMCPs = document.getElementById('groupMCPs').checked;
-            
-            // Update bars based on MCP grouping
-            updateBars(groupMCPs);
-            
-            // Update scale
-            updateScale(logScale);
+            try {
+                const logScale = document.getElementById('logScale').checked;
+                const groupMCPs = document.getElementById('groupMCPs').checked;
+                
+                // Update bars based on MCP grouping
+                updateBars(groupMCPs);
+                
+                // Update scale
+                updateScale(logScale);
+            } catch (error) {
+                console.error('Error in updateVisualization:', error);
+            }
         }
         
         function updateBars(groupMCPs) {
@@ -978,6 +1030,12 @@ export class VerticalVisualizer {
                 let currentTurnNum = -1;
                 
                 for (const segment of groupedSegments) {
+                    // Handle compaction markers specially
+                    if (segment.isCompaction) {
+                        newBarsHTML += \`<div class="compaction-marker"><span class="compaction-text">═══ Conversation Compacted ═══</span></div>\\n\`;
+                        continue;
+                    }
+                    
                     if (segment.turn !== currentTurnNum) {
                         currentTurnNum = segment.turn;
                         newBarsHTML += \`<div class="turn-marker">Turn \${currentTurnNum}</div>\\n\`;
@@ -987,6 +1045,7 @@ export class VerticalVisualizer {
                         'segment-bar',
                         \`type-\${segment.type}\`,
                         segment.isNew ? 'is-new' : '',
+                        segment.isRepeated ? 'is-repeated' : '',
                         segment.isPreprocessing ? 'is-preprocessing' : ''
                     ].filter(c => c).join(' ');
                     
@@ -1011,7 +1070,13 @@ export class VerticalVisualizer {
                 let newBarsHTML = '<div class="grid-lines"></div>';
                 let currentTurnNum = -1;
                 
-                for (const segment of filteredSegments) {
+                for (const segment of segments) {
+                    // Handle compaction markers specially
+                    if (segment.isCompaction) {
+                        newBarsHTML += '<div class="compaction-marker"><span class="compaction-text">═══ Conversation Compacted ═══</span></div>\\n';
+                        continue;
+                    }
+                    
                     if (segment.turn !== currentTurnNum) {
                         currentTurnNum = segment.turn;
                         newBarsHTML += '<div class="turn-marker">Turn ' + currentTurnNum + '</div>\\n';
@@ -1021,6 +1086,7 @@ export class VerticalVisualizer {
                         'segment-bar',
                         'type-' + segment.type,
                         segment.isNew ? 'is-new' : '',
+                        segment.isRepeated ? 'is-repeated' : '',
                         segment.isPreprocessing ? 'is-preprocessing' : ''
                     ].filter(c => c).join(' ');
                     
@@ -1076,7 +1142,8 @@ export class VerticalVisualizer {
                 '"': '&quot;',
                 "'": '&#039;'
             };
-            return text.replace(/[&<>"']/g, m => map[m]);
+            // Handle backticks separately to avoid breaking template literals
+            return text.replace(/[&<>"']/g, m => map[m]).replace(/\`/g, '&#96;');
         }
         
         function updateGridLines(scale, currentMaxTokens) {
@@ -1156,7 +1223,8 @@ export class VerticalVisualizer {
       '"': '&quot;',
       "'": '&#039;'
     };
-    return text.replace(/[&<>"']/g, m => map[m]);
+    // Handle backticks separately to avoid breaking template literals
+    return text.replace(/[&<>"']/g, m => map[m]).replace(/`/g, '&#96;');
   }
 
   private formatTypeName(type: string): string {

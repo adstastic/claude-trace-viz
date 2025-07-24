@@ -13,6 +13,8 @@ export interface Segment {
   model: string;
   isPreprocessing: boolean;
   isNew?: boolean;
+  isRepeated?: boolean;  // True for content that appeared in previous turns
+  isCompaction?: boolean;  // True for compaction markers
   toolCount?: number;
   fullContent?: string;  // Optional full content for modal display
   rawData?: any;  // Raw request/response data from trace

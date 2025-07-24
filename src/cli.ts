@@ -27,7 +27,7 @@ program
   .option('--no-open', 'Do not automatically open the HTML file')
   .option('--use-anthropic-api', 'Use Anthropic API for accurate token counting')
   .option('--api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
-  .option('--force-reprocess', 'Force reprocessing even if segments file exists')
+  .option('-f, --force-reprocess', 'Force reprocessing even if segments file exists (alias: --force)')
   .action(async (file: string, options) => {
     try {
       // Validate input file exists
