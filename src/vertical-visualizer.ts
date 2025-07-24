@@ -219,28 +219,30 @@ export class VerticalVisualizer {
             color: var(--base1);
             font-size: 28px;
             font-weight: 600;
-            margin-bottom: 16px;
+            margin-bottom: 0;
+            flex-shrink: 0;
         }
         
-        .stats-container {
+        .stats-card {
             background: var(--base02);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 16px;
+            border-radius: 6px;
+            padding: 8px 12px;
+            text-align: center;
+            min-width: 120px;
+            flex: 0 0 auto;
         }
         
-        .stat-value {
+        .stats-card .stat-value {
             color: var(--base3);
             font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 2px;
         }
         
-        .stat-label {
+        .stats-card .stat-label {
             color: var(--base1);
-        }
-        
-        .stat-separator {
-            color: var(--base01);
-            margin: 0 8px;
+            font-size: 11px;
+            line-height: 1.2;
         }
         
         .chart-container {
@@ -408,8 +410,8 @@ export class VerticalVisualizer {
             top: 0;
             bottom: 0;
             width: 1px;
-            background: var(--base01);
-            opacity: 0.4;
+            background: var(--base00);
+            opacity: 0.6;
         }
         
         .grid-label {
@@ -417,7 +419,7 @@ export class VerticalVisualizer {
             top: -20px;
             transform: translateX(-50%);
             font-size: 11px;
-            color: var(--base01);
+            color: var(--base00);
         }
         
         .segment-bar {
@@ -460,7 +462,7 @@ export class VerticalVisualizer {
         }
         
         .is-preprocessing {
-            opacity: 0.6;
+            opacity: 0.7 !important;
             background-image: repeating-linear-gradient(
                 -45deg,
                 transparent,
@@ -640,46 +642,42 @@ export class VerticalVisualizer {
 </head>
 <body>
     <div class="max-w-7xl mx-auto">
-        <!-- Header -->
-        <h1 class="page-title">Claude Trace Visualization</h1>
-        
-        <!-- Summary Stats -->
-        <div class="stats-container">
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                <!-- Total tokens -->
-                <div class="flex items-center whitespace-nowrap">
-                    <span class="stat-value">${stats.totalTokens.toLocaleString()}</span>
-                    <span class="ml-1 stat-label">total tokens</span>
-                </div>
-                
-                <!-- Context percentage -->
-                <div class="flex items-center whitespace-nowrap">
-                    <span class="stat-separator">•</span>
-                    <span class="ml-3 stat-value">${((stats.totalTokens / maxTokens) * 100).toFixed(1)}%</span>
-                    <span class="ml-1 stat-label">of ${maxTokens.toLocaleString()} context</span>
-                </div>
-                
-                ${stats.preprocessingTokens > 0 ? `
-                <!-- Preprocessing tokens -->
-                <div class="flex items-center whitespace-nowrap">
-                    <span class="stat-separator">•</span>
-                    <span class="ml-3 stat-label">${stats.preprocessingTokens.toLocaleString()} preprocessing tokens</span>
-                </div>` : ''}
-                
-                ${Object.entries(stats.allModelTokens).length > 0 ? `
-                <!-- Model tokens -->
-                <div class="flex items-center whitespace-nowrap">
-                    <span class="stat-separator">•</span>
-                    <div class="ml-3 flex items-center gap-2">
-                        ${Object.entries(stats.allModelTokens)
-                            .sort(([, a], [, b]) => b - a)
-                            .map(([model, tokens]) => {
-                                const percentage = ((tokens / (stats.totalTokens + stats.preprocessingTokens)) * 100).toFixed(1);
-                                return `<span class="stat-label whitespace-nowrap">${model}: ${tokens.toLocaleString()} (${percentage}%)</span>`;
-                            }).join('<span class="stat-separator">/</span>')}
-                    </div>
-                </div>
-                ` : ''}
+        <!-- Header with stats -->
+        <div class="flex flex-col lg:flex-row lg:items-center gap-4 mb-4">
+            <h1 class="page-title">Claude Trace Visualization</h1>
+            
+            <!-- Summary Stats -->
+            <div class="flex flex-wrap gap-3 lg:ml-auto">
+            <!-- Total tokens card -->
+            <div class="stats-card">
+                <div class="stat-value">${stats.totalTokens.toLocaleString()}</div>
+                <div class="stat-label">total tokens</div>
+            </div>
+            
+            <!-- Context percentage card -->
+            <div class="stats-card">
+                <div class="stat-value">${((stats.totalTokens / maxTokens) * 100).toFixed(1)}%</div>
+                <div class="stat-label">of ${maxTokens.toLocaleString()} context</div>
+            </div>
+            
+            ${stats.preprocessingTokens > 0 ? `
+            <!-- Preprocessing tokens card -->
+            <div class="stats-card">
+                <div class="stat-value">${stats.preprocessingTokens.toLocaleString()}</div>
+                <div class="stat-label">preprocessing tokens</div>
+            </div>` : ''}
+            
+            ${Object.entries(stats.allModelTokens)
+                .sort(([, a], [, b]) => b - a)
+                .map(([model, tokens]) => {
+                    const percentage = ((tokens / (stats.totalTokens + stats.preprocessingTokens)) * 100).toFixed(1);
+                    return `
+            <!-- ${model} model card -->
+            <div class="stats-card">
+                <div class="stat-value">${model}: ${tokens.toLocaleString()}</div>
+                <div class="stat-label">${percentage}% of all tokens</div>
+            </div>`;
+                }).join('')}
             </div>
         </div>
         
@@ -724,7 +722,7 @@ export class VerticalVisualizer {
                     <div class="flex items-center gap-2">
                         <span class="text-xs stat-label w-32">${mcp}</span>
                         <div class="flex-1 bar-track rounded-full h-3 relative">
-                            <div class="bg-red-500 h-3 rounded-full" style="width: ${(tokens / topMcps[0][1] * 100).toFixed(0)}%"></div>
+                            <div class="bg-red-500 h-3 rounded-full" style="width: ${percentage}%"></div>
                         </div>
                         <span class="text-xs stat-label w-10 text-right">${percentage}%</span>
                     </div>
