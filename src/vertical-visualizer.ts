@@ -188,6 +188,115 @@ export class VerticalVisualizer {
     <title>Claude Trace Vertical Visualization</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Solarized Dark color palette */
+        :root {
+            --base03:  #002b36;  /* darkest background */
+            --base02:  #073642;  /* dark background */
+            --base01:  #586e75;  /* emphasized content */
+            --base00:  #657b83;  /* body text */
+            --base0:   #839496;  /* body text */
+            --base1:   #93a1a1;  /* light emphasized content */
+            --base2:   #eee8d5;  /* light background */
+            --base3:   #fdf6e3;  /* lightest background */
+            --yellow:  #b58900;
+            --orange:  #cb4b16;
+            --red:     #dc322f;
+            --magenta: #d33682;
+            --violet:  #6c71c4;
+            --blue:    #268bd2;
+            --cyan:    #2aa198;
+            --green:   #859900;
+        }
+        
+        body {
+            background: var(--base03);
+            color: var(--base1);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+        }
+        
+        .page-title {
+            color: var(--base1);
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        
+        .stats-container {
+            background: var(--base02);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .stat-value {
+            color: var(--base3);
+            font-weight: 600;
+        }
+        
+        .stat-label {
+            color: var(--base1);
+        }
+        
+        .stat-separator {
+            color: var(--base01);
+            margin: 0 8px;
+        }
+        
+        .chart-container {
+            background: var(--base02);
+            border-radius: 8px;
+            padding: 16px 16px 12px 16px;
+            margin-bottom: 16px;
+        }
+        
+        .chart-title {
+            color: var(--base1);
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .timeline-container {
+            background: var(--base02);
+            padding: 16px;
+            border-radius: 8px;
+            position: relative;
+            overflow: visible;
+        }
+        
+        .footer-notes {
+            color: var(--base01);
+            font-size: 12px;
+            margin-top: 16px;
+        }
+        
+        .bar-track {
+            background: var(--base03);
+        }
+        
+        .floating-controls {
+            background: var(--base02);
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid var(--base01);
+            opacity: 0.95;
+        }
+        
+        .control-label {
+            color: var(--base1);
+            font-size: 12px;
+        }
+        
+        .legend-item {
+            color: var(--base1);
+            font-size: 12px;
+        }
+        
+        .legend-border {
+            border-top: 1px solid var(--base01);
+        }
+        
         /* Timeline bar styles */
         .segment-bar {
             @apply rounded transition-all duration-200 flex items-center px-3 mb-1 text-white text-sm font-medium;
@@ -209,7 +318,7 @@ export class VerticalVisualizer {
         
         /* Preprocessing pattern */
         .is-preprocessing {
-            opacity: 0.7;
+            opacity: 0.7 !important;
             background-image: repeating-linear-gradient(
                 -45deg,
                 transparent,
@@ -240,7 +349,7 @@ export class VerticalVisualizer {
         }
         
         h1 {
-            color: #93a1a1; /* base1 */
+            color: var(--base1);
             margin-bottom: 10px;
             font-size: 28px;
             font-weight: 600;
@@ -249,7 +358,7 @@ export class VerticalVisualizer {
         .stats {
             margin-bottom: 20px;
             font-size: 14px;
-            color: #657b83; /* base00 */
+            color: var(--base00);
         }
         
         .legend {
@@ -272,7 +381,7 @@ export class VerticalVisualizer {
         }
         
         #visualization-container {
-            background: #073642; /* base02 */
+            background: var(--base02);
             padding: 20px;
             border-radius: 8px;
             position: relative;
@@ -281,7 +390,7 @@ export class VerticalVisualizer {
         
         #bars {
             position: relative;
-            padding-top: 25px;
+            padding-top: 0;
             margin-top: 20px;
         }
         
@@ -299,7 +408,7 @@ export class VerticalVisualizer {
             top: 0;
             bottom: 0;
             width: 1px;
-            background: #586e75; /* base01 */
+            background: var(--base01);
             opacity: 0.4;
         }
         
@@ -308,7 +417,7 @@ export class VerticalVisualizer {
             top: -20px;
             transform: translateX(-50%);
             font-size: 11px;
-            color: #586e75; /* base01 */
+            color: var(--base01);
         }
         
         .segment-bar {
@@ -325,12 +434,12 @@ export class VerticalVisualizer {
         }
         
         .segment-bar:hover {
-            opacity: 0.9;
+            opacity: 1;
             transform: translateX(2px);
         }
         
         .segment-label {
-            color: #fdf6e3; /* base3 */
+            color: var(--base3);
             font-size: 13px;
             font-weight: 500;
             white-space: nowrap;
@@ -338,12 +447,13 @@ export class VerticalVisualizer {
             position: relative;
         }
         
-        .type-user { background: #859900; } /* green */
-        .type-system { background: #6c71c4; } /* violet */
-        .type-assistant { background: #268bd2; } /* blue */
-        .type-tools { background: #d33682; } /* magenta */
-        .type-mcp_tools { background: #dc322f; } /* red */
-        .type-tool_use { background: #cb4b16; } /* orange */
+        
+        .type-user { background: var(--green); opacity: 0.85; }
+        .type-system { background: var(--violet); opacity: 0.85; }
+        .type-assistant { background: var(--blue); opacity: 0.85; }
+        .type-tools { background: var(--magenta); opacity: 0.85; }
+        .type-mcp_tools { background: var(--red); opacity: 0.85; }
+        .type-tool_use { background: var(--orange); opacity: 0.85; }
         
         .is-new {
             box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.4);
@@ -362,9 +472,13 @@ export class VerticalVisualizer {
         
         .turn-marker {
             font-size: 11px;
-            color: #586e75; /* base01 */
+            color: var(--base01);
             margin: 8px 0 4px 0;
             font-weight: 600;
+        }
+        
+        .turn-marker:first-child {
+            margin-top: -20px;
         }
         
         .stats-grid {
@@ -375,13 +489,13 @@ export class VerticalVisualizer {
         }
         
         .stat-section {
-            background: #073642; /* base02 */
+            background: var(--base02);
             padding: 15px;
             border-radius: 6px;
         }
         
         .stat-section h3 {
-            color: #93a1a1; /* base1 */
+            color: var(--base1);
             margin: 0 0 10px 0;
             font-size: 14px;
         }
@@ -398,17 +512,17 @@ export class VerticalVisualizer {
         }
         
         .stat-label {
-            color: #839496; /* base0 */
+            color: var(--base0);
         }
         
         .stat-value {
-            color: #93a1a1; /* base1 */
+            color: var(--base1);
             font-weight: 500;
         }
         
         .stat-bar {
             height: 20px;
-            background: #002b36; /* base03 */
+            background: var(--base03);
             border-radius: 3px;
             overflow: hidden;
         }
@@ -418,12 +532,12 @@ export class VerticalVisualizer {
             transition: width 0.3s;
         }
         
-        .type-bar-mcp_tools { background: #dc322f; } /* red */
-        .type-bar-tools { background: #d33682; } /* magenta */
-        .type-bar-system { background: #6c71c4; } /* violet */
-        .type-bar-tool_use { background: #cb4b16; } /* orange */
-        .type-bar-assistant { background: #268bd2; } /* blue */
-        .type-bar-user { background: #859900; } /* green */
+        .type-bar-mcp_tools { background: var(--red); }
+        .type-bar-tools { background: var(--magenta); }
+        .type-bar-system { background: var(--violet); }
+        .type-bar-tool_use { background: var(--orange); }
+        .type-bar-assistant { background: var(--blue); }
+        .type-bar-user { background: var(--green); }
         
         .pie-chart-container {
             display: flex;
@@ -468,9 +582,9 @@ export class VerticalVisualizer {
             text-align: center;
             padding: 8px 12px;
             font-size: 13px;
-            background: #073642; /* base02 */
-            color: #fdf6e3; /* base3 */
-            border: 1px solid #586e75; /* base01 */
+            background: var(--base02);
+            color: var(--base3);
+            border: 1px solid var(--base01);
             border-radius: 4px;
             pointer-events: none;
             opacity: 0;
@@ -479,7 +593,7 @@ export class VerticalVisualizer {
         
         .preprocessing-note {
             font-size: 12px;
-            color: #586e75; /* base01 */
+            color: var(--base01);
             font-style: italic;
             margin-top: 10px;
         }
@@ -488,8 +602,8 @@ export class VerticalVisualizer {
             position: fixed;
             top: 20px;
             right: 20px;
-            background: #073642; /* base02 */
-            border: 1px solid #586e75; /* base01 */
+            background: var(--base02);
+            border: 1px solid var(--base01);
             border-radius: 4px;
             padding: 12px 16px;
             font-size: 14px;
@@ -513,39 +627,58 @@ export class VerticalVisualizer {
         }
         
         .control-item label {
-            color: #93a1a1; /* base1 */
+            color: var(--base1);
             cursor: pointer;
             user-select: none;
         }
         
         .control-item label:hover {
-            color: #fdf6e3; /* base3 */
+            color: var(--base3);
         }
         
     </style>
 </head>
-<body class="min-h-screen bg-gray-50 p-6">
+<body>
     <div class="max-w-7xl mx-auto">
         <!-- Header -->
-        <h1 class="text-3xl font-bold text-gray-900 mb-4">Claude Trace Visualization</h1>
+        <h1 class="page-title">Claude Trace Visualization</h1>
         
         <!-- Summary Stats -->
-        <div class="bg-white rounded-lg shadow-sm p-3 mb-4">
-            <div class="text-sm text-gray-600">
-                <span class="font-semibold text-gray-900">${stats.totalTokens.toLocaleString()}</span> total tokens
-                <span class="text-gray-400 mx-2">•</span>
-                <span class="font-semibold text-gray-900">${((stats.totalTokens / maxTokens) * 100).toFixed(1)}%</span> of ${maxTokens.toLocaleString()} context
+        <div class="stats-container">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <!-- Total tokens -->
+                <div class="flex items-center whitespace-nowrap">
+                    <span class="stat-value">${stats.totalTokens.toLocaleString()}</span>
+                    <span class="ml-1 stat-label">total tokens</span>
+                </div>
+                
+                <!-- Context percentage -->
+                <div class="flex items-center whitespace-nowrap">
+                    <span class="stat-separator">•</span>
+                    <span class="ml-3 stat-value">${((stats.totalTokens / maxTokens) * 100).toFixed(1)}%</span>
+                    <span class="ml-1 stat-label">of ${maxTokens.toLocaleString()} context</span>
+                </div>
+                
                 ${stats.preprocessingTokens > 0 ? `
-                <span class="text-gray-400 mx-2">•</span>
-                <span class="text-gray-500">${stats.preprocessingTokens.toLocaleString()} preprocessing tokens</span>` : ''}
+                <!-- Preprocessing tokens -->
+                <div class="flex items-center whitespace-nowrap">
+                    <span class="stat-separator">•</span>
+                    <span class="ml-3 stat-label">${stats.preprocessingTokens.toLocaleString()} preprocessing tokens</span>
+                </div>` : ''}
+                
                 ${Object.entries(stats.allModelTokens).length > 0 ? `
-                <span class="text-gray-400 mx-2">•</span>
-                ${Object.entries(stats.allModelTokens)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([model, tokens]) => {
-                        const percentage = ((tokens / (stats.totalTokens + stats.preprocessingTokens)) * 100).toFixed(1);
-                        return `<span class="text-gray-700">${model}: ${tokens.toLocaleString()} (${percentage}%)</span>`;
-                    }).join(' / ')}
+                <!-- Model tokens -->
+                <div class="flex items-center whitespace-nowrap">
+                    <span class="stat-separator">•</span>
+                    <div class="ml-3 flex items-center gap-2">
+                        ${Object.entries(stats.allModelTokens)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([model, tokens]) => {
+                                const percentage = ((tokens / (stats.totalTokens + stats.preprocessingTokens)) * 100).toFixed(1);
+                                return `<span class="stat-label whitespace-nowrap">${model}: ${tokens.toLocaleString()} (${percentage}%)</span>`;
+                            }).join('<span class="stat-separator">/</span>')}
+                    </div>
+                </div>
                 ` : ''}
             </div>
         </div>
@@ -553,8 +686,8 @@ export class VerticalVisualizer {
         <!-- Compact Stats Row -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <!-- Token Distribution (horizontal bars) -->
-            <div class="bg-white rounded-lg shadow-sm px-4 py-3">
-                <h4 class="text-xs font-semibold text-gray-700 mb-2">Token Distribution</h4>
+            <div class="chart-container">
+                <h4 class="chart-title">Token Distribution</h4>
                 <div class="space-y-1">
                     ${Object.entries(stats.typeTokens)
                         .sort(([, a], [, b]) => b - a)
@@ -570,11 +703,11 @@ export class VerticalVisualizer {
                             };
                             return `
                     <div class="flex items-center gap-2">
-                        <span class="text-xs text-gray-600 w-20">${this.formatTypeName(type)}</span>
-                        <div class="flex-1 bg-gray-100 rounded-full h-3 relative">
+                        <span class="text-xs stat-label w-20">${this.formatTypeName(type)}</span>
+                        <div class="flex-1 bar-track rounded-full h-3 relative">
                             <div class="${colors[type] || 'bg-gray-500'} h-3 rounded-full" style="width: ${percentage}%"></div>
                         </div>
-                        <span class="text-xs text-gray-500 w-10 text-right">${percentage}%</span>
+                        <span class="text-xs stat-label w-10 text-right">${percentage}%</span>
                     </div>
                     `;}).join('')}
                 </div>
@@ -582,18 +715,18 @@ export class VerticalVisualizer {
             
             ${topMcps.length > 0 ? `
             <!-- MCP Tools (horizontal bars) -->
-            <div class="bg-white rounded-lg shadow-sm px-4 py-3">
-                <h4 class="text-xs font-semibold text-gray-700 mb-2">MCP Tools</h4>
+            <div class="chart-container">
+                <h4 class="chart-title">MCP Tools</h4>
                 <div class="space-y-1">
                     ${topMcps.slice(0, 4).map(([mcp, tokens]) => {
                         const percentage = (tokens / stats.totalTokens * 100).toFixed(1);
                         return `
                     <div class="flex items-center gap-2">
-                        <span class="text-xs text-gray-600 w-32">${mcp}</span>
-                        <div class="flex-1 bg-gray-100 rounded-full h-3 relative">
+                        <span class="text-xs stat-label w-32">${mcp}</span>
+                        <div class="flex-1 bar-track rounded-full h-3 relative">
                             <div class="bg-red-500 h-3 rounded-full" style="width: ${(tokens / topMcps[0][1] * 100).toFixed(0)}%"></div>
                         </div>
-                        <span class="text-xs text-gray-500 w-10 text-right">${percentage}%</span>
+                        <span class="text-xs stat-label w-10 text-right">${percentage}%</span>
                     </div>
                     `;}).join('')}
                 </div>
@@ -602,48 +735,46 @@ export class VerticalVisualizer {
         </div>
         
         <!-- Timeline Visualization -->
-        <div class="bg-white rounded-lg shadow-sm p-6 relative">
-            <!-- Floating checkboxes at scale level -->
-            <div class="absolute" style="top: 5px; left: 20px; z-index: 10;">
-                <div class="flex gap-4">
-                    <label class="flex items-center space-x-1 cursor-pointer bg-white/90 px-2 py-1 rounded">
-                        <input type="checkbox" id="logScale" checked onchange="updateVisualization()" class="h-3 w-3 text-blue-600 rounded">
-                        <span class="text-xs text-gray-700">Log scale</span>
-                    </label>
-                    <label class="flex items-center space-x-1 cursor-pointer bg-white/90 px-2 py-1 rounded">
-                        <input type="checkbox" id="groupMCPs" onchange="updateVisualization()" class="h-3 w-3 text-blue-600 rounded">
-                        <span class="text-xs text-gray-700">Group MCPs</span>
-                    </label>
-                </div>
-            </div>
-            
-            <!-- Floating legend below scale on the right -->
-            <div class="absolute" style="top: 10px; right: 20px; z-index: 10;">
-                <div class="bg-white/90 px-3 py-2 rounded">
-                    <div class="flex flex-col gap-1">
+        <div class="timeline-container">
+            <!-- Floating controls and legend on the right below scale -->
+            <div class="absolute" style="top: 44px; right: 16px; z-index: 100; pointer-events: auto;">
+                <div class="floating-controls">
+                    <!-- Checkboxes -->
+                    <div class="flex flex-col gap-2 mb-3">
+                        <label class="flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="logScale" checked onchange="updateVisualization()" class="h-3 w-3 text-blue-600 rounded">
+                            <span class="control-label">Log scale</span>
+                        </label>
+                        <label class="flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="groupMCPs" onchange="updateVisualization()" class="h-3 w-3 text-blue-600 rounded">
+                            <span class="control-label">Group MCPs</span>
+                        </label>
+                    </div>
+                    <!-- Legend -->
+                    <div class="flex flex-col gap-1 pt-2 legend-border">
                         <span class="flex items-center gap-1">
                             <span class="w-2 h-2 rounded bg-emerald-500"></span>
-                            <span class="text-xs text-gray-600">User</span>
+                            <span class="legend-item">User</span>
                         </span>
                         <span class="flex items-center gap-1">
                             <span class="w-2 h-2 rounded bg-violet-500"></span>
-                            <span class="text-xs text-gray-600">System</span>
+                            <span class="legend-item">System</span>
                         </span>
                         <span class="flex items-center gap-1">
                             <span class="w-2 h-2 rounded bg-blue-500"></span>
-                            <span class="text-xs text-gray-600">Assistant</span>
+                            <span class="legend-item">Assistant</span>
                         </span>
                         <span class="flex items-center gap-1">
                             <span class="w-2 h-2 rounded bg-pink-500"></span>
-                            <span class="text-xs text-gray-600">Anthropic Tools</span>
+                            <span class="legend-item">Anthropic Tools</span>
                         </span>
                         <span class="flex items-center gap-1">
                             <span class="w-2 h-2 rounded bg-red-500"></span>
-                            <span class="text-xs text-gray-600">MCP Tools</span>
+                            <span class="legend-item">MCP Tools</span>
                         </span>
                         <span class="flex items-center gap-1">
                             <span class="w-2 h-2 rounded bg-amber-500"></span>
-                            <span class="text-xs text-gray-600">Tool Use</span>
+                            <span class="legend-item">Tool Use</span>
                         </span>
                     </div>
                 </div>
@@ -657,7 +788,7 @@ export class VerticalVisualizer {
             </div>
         </div>
         
-        <div class="text-xs text-gray-500 mt-4 space-y-1">
+        <div class="footer-notes space-y-1">
             <p>• Bars with diagonal stripes represent preprocessing requests (not counted in main total)</p>
             <p>• Token counts marked with ~ are estimates</p>
         </div>
@@ -869,7 +1000,9 @@ export class VerticalVisualizer {
                         title = \`MCPs: \${segment.mcpNames.join(', ')}\\nTotal: \${segment.tokens.toLocaleString()} tokens\`;
                     }
                     
-                    newBarsHTML += \`<div class="\${classes}" data-tokens="\${segment.tokens}" style="width: 50%;" title="\${escapeHtml(title)}">
+                    const initialWidth = 50; // Initial width percentage for grouped view
+                    
+                    newBarsHTML += \`<div class="\${classes}" data-tokens="\${segment.tokens}" style="width: \${initialWidth}%;" title="\${escapeHtml(title)}">
         <span class="segment-label">\${escapeHtml(label)}</span>
       </div>\\n\`;
                 }
@@ -904,6 +1037,7 @@ export class VerticalVisualizer {
                 }
                 
                 bar.style.width = widthPercent + '%';
+                
             });
             
             // Update grid lines
