@@ -604,7 +604,7 @@ export class VerticalVisualizer {
         <!-- Timeline Visualization -->
         <div class="bg-white rounded-lg shadow-sm p-6 relative">
             <!-- Floating checkboxes at scale level -->
-            <div class="absolute" style="top: -20px; left: 20px; z-index: 10;">
+            <div class="absolute" style="top: 5px; left: 20px; z-index: 10;">
                 <div class="flex gap-4">
                     <label class="flex items-center space-x-1 cursor-pointer bg-white/90 px-2 py-1 rounded">
                         <input type="checkbox" id="logScale" checked onchange="updateVisualization()" class="h-3 w-3 text-blue-600 rounded">
