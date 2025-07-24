@@ -6,14 +6,22 @@ import * as path from 'path';
 import open from 'open';
 import { VerticalVisualizer } from './vertical-visualizer';
 import { SegmentsIO } from './utils/segments-io';
+import { analyzeCommand } from './commands/analyze';
 
 const program = new Command();
 
 program
   .name('claude-trace-viz')
   .description('Generate visualizations of Claude trace files')
-  .version('1.0.0')
-  .argument('<file>', 'Path to the .jsonl trace file')
+  .version('1.0.0');
+
+// Add analyze subcommand
+program.addCommand(analyzeCommand);
+
+// Default visualization command
+program
+  .command('visualize <file>', { isDefault: true })
+  .description('Generate vertical visualization of trace file')
   .option('-o, --output <file>', 'Output HTML file name')
   .option('-m, --max-tokens <number>', 'Maximum context window size', '200000')
   .option('--no-open', 'Do not automatically open the HTML file')

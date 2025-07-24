@@ -79,6 +79,10 @@ export class TokenCounter {
           if (item.type === 'tool_use' && item.input) {
             return JSON.stringify(item.input);
           }
+          // For tool definitions (objects without 'type' field)
+          if (!item.type && (item.name || item.description)) {
+            return JSON.stringify(item);
+          }
         }
         return '';
       }).filter(text => text.length > 0).join(' ');

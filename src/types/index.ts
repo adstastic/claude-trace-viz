@@ -1,5 +1,8 @@
 import { RawPair } from '@mariozechner/claude-trace';
 
+// Re-export for convenience
+export { RawPair };
+
 export interface Segment {
   type: 'user' | 'system' | 'assistant' | 'tools' | 'mcp_tools' | 'tool_use';
   tokens: number;
@@ -40,3 +43,6 @@ export interface ApiOptions {
   useAnthropicApi: boolean;
   apiKey?: string;
 }
+
+// Legacy type - use RawPair from claude-trace instead
+export type TraceEntry = RawPair;

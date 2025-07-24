@@ -47,7 +47,7 @@ export class TraceReader {
   }
   
   /**
-   * Get specific content from an entry
+   * Get specific content from an entry using proper types
    */
   getSegmentRawData(lineNumber: number, segmentType: string, segmentIndex?: number): any {
     const entry = this.getEntry(lineNumber);
