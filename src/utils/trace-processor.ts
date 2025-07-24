@@ -181,6 +181,9 @@ export class TraceProcessor {
       } else if (message.role === 'assistant' && Array.isArray(message.content)) {
         // Handle previous assistant messages from conversation history
         for (const block of message.content) {
+          if (!block || typeof block !== 'object') {
+            continue;
+          }
           if (block.type === 'text') {
             const tokenResult = await this.getTokenCount(
               { type: 'text', text: block.text || '' },
@@ -209,6 +212,9 @@ export class TraceProcessor {
     // Process assistant response (only the final response, not history)
     if (finalPair.response.content && Array.isArray(finalPair.response.content)) {
       for (const contentItem of finalPair.response.content) {
+        if (!contentItem || typeof contentItem !== 'object') {
+          continue;
+        }
         if (contentItem.type === 'text') {
           const text = contentItem.text || '';
           const tokenResult = await this.getTokenCount({ type: 'text', text }, model, 'assistant');
@@ -437,6 +443,9 @@ export class TraceProcessor {
   ): Promise<void> {
     if (Array.isArray(content)) {
       for (const block of content) {
+        if (!block || typeof block !== 'object') {
+          continue;
+        }
         if (block.type === 'text') {
           const tokenResult = await this.getTokenCount(
             { type: 'text', text: block.text || '' },
