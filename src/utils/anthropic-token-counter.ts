@@ -111,12 +111,34 @@ export class AnthropicTokenCounter {
         };
         
       case 'user':
-      case 'assistant':
+        // User messages can be string or array
         return {
           model: apiModel,
           messages: [{
-            role: segmentType,
+            role: 'user',
             content: content
+          }]
+        };
+        
+      case 'assistant':
+        // Assistant messages need to be in the proper content block format
+        let assistantContent;
+        if (typeof content === 'string') {
+          assistantContent = [{ type: 'text', text: content }];
+        } else if (typeof content === 'object' && content.type === 'text' && content.text) {
+          assistantContent = [content];
+        } else if (Array.isArray(content)) {
+          assistantContent = content;
+        } else {
+          // Fallback: treat as text
+          assistantContent = [{ type: 'text', text: String(content) }];
+        }
+        
+        return {
+          model: apiModel,
+          messages: [{
+            role: 'assistant',
+            content: assistantContent
           }]
         };
         

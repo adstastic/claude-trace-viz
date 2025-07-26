@@ -161,6 +161,31 @@ The `.jsonl` trace files contain one JSON object per line, each representing a r
 - **Tool definitions**: In `request.body.tools` array
 - **Tool usage**: In content items with `type: "tool_use"`
 
+## Trace File Peculiarities
+
+### Conversation Compaction
+When Claude Code compacts or manages long conversations, trace files may exhibit these characteristics:
+
+1. **Administrative Requests at Start**: The first few requests might be:
+   - Title generation requests (asking to summarize the conversation)
+   - Topic detection requests (checking if conversation topic changed)
+   - These use Haiku model with low token counts (<100 input tokens)
+
+2. **Missing Explicit Start Instructions**: In compacted conversations:
+   - The first user message may contain system instructions in `<system-reminder>` tags
+   - There may not be an explicit "start the assistant" instruction
+   - The actual conversation begins after administrative requests
+
+3. **Model References vs Actual Usage**: 
+   - Text mentions of model switches (e.g., "/model sonnet") in conversation content don't indicate actual API model changes
+   - Check the `request.body.model` field for actual model usage
+   - Administrative requests typically use Haiku, while actual conversation uses Opus/Sonnet
+
+4. **Detecting Compaction**: Look for these patterns:
+   - First request asks for a conversation title/summary
+   - Multiple Haiku requests with <100 input tokens at start
+   - System content appears in `<system-reminder>` tags rather than explicit prompts
+
 ## Development Notes
 - Don't close playwright when done, leave it open so I can see
 

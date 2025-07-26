@@ -10,7 +10,8 @@ export class VerticalVisualizer {
     modelTokens: {},
     mcpTokens: {},
     modelMcpTokens: {},
-    preprocessingTokens: 0
+    preprocessingTokens: 0,
+    allModelTokens: {} // Track all models including preprocessing
   };
   private traceFilePath: string = '';
 
@@ -62,11 +63,19 @@ export class VerticalVisualizer {
       modelTokens: {},
       mcpTokens: {},
       modelMcpTokens: {},
-      preprocessingTokens: 0
+      preprocessingTokens: 0,
+      allModelTokens: {}
     };
 
     for (const segment of segments) {
       const tokens = segment.tokens;
+      const model = segment.model;
+      
+      // Track all models (including preprocessing)
+      if (!this.statistics.allModelTokens[model]) {
+        this.statistics.allModelTokens[model] = 0;
+      }
+      this.statistics.allModelTokens[model] += tokens;
       
       // Don't count preprocessing tokens in main total
       if (!segment.isPreprocessing) {
@@ -75,22 +84,24 @@ export class VerticalVisualizer {
         this.statistics.preprocessingTokens += tokens;
       }
       
-      // Type tokens
-      const type = segment.type;
-      if (!this.statistics.typeTokens[type]) {
-        this.statistics.typeTokens[type] = 0;
+      // Only count non-preprocessing segments in type and model stats
+      if (!segment.isPreprocessing) {
+        // Type tokens
+        const type = segment.type;
+        if (!this.statistics.typeTokens[type]) {
+          this.statistics.typeTokens[type] = 0;
+        }
+        this.statistics.typeTokens[type] += tokens;
+        
+        // Model tokens (for percentage calculation)
+        if (!this.statistics.modelTokens[model]) {
+          this.statistics.modelTokens[model] = 0;
+        }
+        this.statistics.modelTokens[model] += tokens;
       }
-      this.statistics.typeTokens[type] += tokens;
       
-      // Model tokens
-      const model = segment.model;
-      if (!this.statistics.modelTokens[model]) {
-        this.statistics.modelTokens[model] = 0;
-      }
-      this.statistics.modelTokens[model] += tokens;
-      
-      // MCP tokens
-      if (segment.type === 'mcp_tools' && segment.displayName) {
+      // MCP tokens (only for non-preprocessing)
+      if (!segment.isPreprocessing && segment.type === 'mcp_tools' && segment.displayName) {
         const mcpName = segment.displayName.replace('MCP: ', '');
         if (!this.statistics.mcpTokens[mcpName]) {
           this.statistics.mcpTokens[mcpName] = 0;
@@ -98,6 +109,7 @@ export class VerticalVisualizer {
         this.statistics.mcpTokens[mcpName] += tokens;
         
         // Model-specific MCP tokens
+        const model = segment.model;
         if (!this.statistics.modelMcpTokens[model]) {
           this.statistics.modelMcpTokens[model] = {};
         }
@@ -120,6 +132,14 @@ export class VerticalVisualizer {
     let currentTurn = -1;
     
     for (const segment of segments) {
+      // Handle compaction markers specially
+      if (segment.isCompaction) {
+        barsHTML += `<div class="compaction-marker">
+          <span class="compaction-text">═══ Conversation Compacted ═══</span>
+        </div>\n`;
+        continue;
+      }
+      
       // Add turn marker if new turn
       if (segment.turn !== currentTurn) {
         currentTurn = segment.turn;
@@ -136,16 +156,14 @@ export class VerticalVisualizer {
         'segment-bar',
         `type-${segment.type}`,
         segment.isNew ? 'is-new' : '',
+        segment.isRepeated ? 'is-repeated' : '',
         segment.isPreprocessing ? 'is-preprocessing' : ''
       ].filter(c => c).join(' ');
       
       const tokenLabel = segment.tokensEstimated ? '~' : '';
       const label = `${segment.displayName} (${tokenLabel}${segment.tokens.toLocaleString()} tokens)`;
       
-      // Store segment index for retrieval
-      const segmentIndex = segments.indexOf(segment);
-      
-      barsHTML += `<div class="${classes}" data-tokens="${segment.tokens}" data-segment-index="${segmentIndex}" style="width: ${widthPercent}%;" title="${this.escapeHtml(segment.content)}" onclick="showSegmentContent(${segmentIndex})">
+      barsHTML += `<div class="${classes}" data-tokens="${segment.tokens}" style="width: ${widthPercent}%;" title="${this.escapeHtml(segment.content)}">
         <span class="segment-label">${this.escapeHtml(label)}</span>
       </div>\n`;
     }
@@ -177,27 +195,181 @@ export class VerticalVisualizer {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Claude Trace Vertical Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        * {
-            box-sizing: border-box;
+        /* Solarized Dark color palette */
+        :root {
+            --base03:  #002b36;  /* darkest background */
+            --base02:  #073642;  /* dark background */
+            --base01:  #586e75;  /* emphasized content */
+            --base00:  #657b83;  /* body text */
+            --base0:   #839496;  /* body text */
+            --base1:   #93a1a1;  /* light emphasized content */
+            --base2:   #eee8d5;  /* light background */
+            --base3:   #fdf6e3;  /* lightest background */
+            --yellow:  #b58900;
+            --orange:  #cb4b16;
+            --red:     #dc322f;
+            --magenta: #d33682;
+            --violet:  #6c71c4;
+            --blue:    #268bd2;
+            --cyan:    #2aa198;
+            --green:   #859900;
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 20px;
-            background: #002b36; /* base03 */
-            color: #839496; /* base0 */
+            background: var(--base03);
+            color: var(--base1);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+        }
+        
+        .page-title {
+            color: var(--base1);
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 0;
+            flex-shrink: 0;
+        }
+        
+        .stats-card {
+            background: var(--base02);
+            border-radius: 6px;
+            padding: 8px 12px;
+            text-align: center;
+            min-width: 120px;
+            flex: 0 0 auto;
+        }
+        
+        .stats-card .stat-value {
+            color: var(--base3);
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+        
+        .stats-card .stat-label {
+            color: var(--base1);
+            font-size: 11px;
+            line-height: 1.2;
+        }
+        
+        .chart-container {
+            background: var(--base02);
+            border-radius: 8px;
+            padding: 16px 16px 12px 16px;
+            margin-bottom: 16px;
+        }
+        
+        .chart-title {
+            color: var(--base1);
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .timeline-container {
+            background: var(--base02);
+            padding: 16px;
+            border-radius: 8px;
+            position: relative;
+            overflow: visible;
+        }
+        
+        .footer-notes {
+            color: var(--base01);
+            font-size: 12px;
+            margin-top: 16px;
+        }
+        
+        .bar-track {
+            background: var(--base03);
+        }
+        
+        .floating-controls {
+            background: var(--base02);
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid var(--base01);
+            opacity: 0.95;
+        }
+        
+        .control-label {
+            color: var(--base1);
+            font-size: 12px;
+        }
+        
+        .legend-item {
+            color: var(--base1);
+            font-size: 12px;
+        }
+        
+        .legend-border {
+            border-top: 1px solid var(--base01);
+        }
+        
+        /* Timeline bar styles */
+        .segment-bar {
+            @apply rounded transition-all duration-200 flex items-center px-3 mb-1 text-white text-sm font-medium;
+            height: 36px;
+        }
+        
+        .segment-bar:hover {
+            transform: translateX(2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Token type colors */
+        .type-user { @apply bg-emerald-500; }
+        .type-system { @apply bg-violet-500; }
+        .type-assistant { @apply bg-blue-500; }
+        .type-tools { @apply bg-pink-500; }
+        .type-mcp_tools { @apply bg-red-500; }
+        .type-tool_use { @apply bg-amber-500; }
+        
+        /* Preprocessing pattern */
+        .is-preprocessing {
+            opacity: 0.7 !important;
+            background-image: repeating-linear-gradient(
+                -45deg,
+                transparent,
+                transparent 6px,
+                rgba(255, 255, 255, 0.2) 6px,
+                rgba(255, 255, 255, 0.2) 12px
+            );
+        }
+        
+        /* Grid styling */
+        #bars {
+            padding-top: 2rem;
+            margin-top: 1rem;
+        }
+        
+        .grid-line {
+            @apply absolute top-0 bottom-0 w-px bg-gray-200;
+        }
+        
+        .grid-label {
+            @apply absolute text-xs text-gray-500;
+            top: -1.5rem;
+            transform: translateX(-50%);
+        }
+        
+        .turn-marker {
+            @apply text-xs font-semibold text-gray-600 mt-3 mb-1;
         }
         
         h1 {
-            color: #93a1a1; /* base1 */
+            color: var(--base1);
             margin-bottom: 10px;
+            font-size: 28px;
+            font-weight: 600;
         }
         
         .stats {
             margin-bottom: 20px;
             font-size: 14px;
-            color: #657b83; /* base00 */
+            color: var(--base00);
         }
         
         .legend {
@@ -220,7 +392,7 @@ export class VerticalVisualizer {
         }
         
         #visualization-container {
-            background: #073642; /* base02 */
+            background: var(--base02);
             padding: 20px;
             border-radius: 8px;
             position: relative;
@@ -229,7 +401,7 @@ export class VerticalVisualizer {
         
         #bars {
             position: relative;
-            padding-top: 25px;
+            padding-top: 0;
             margin-top: 20px;
         }
         
@@ -247,8 +419,8 @@ export class VerticalVisualizer {
             top: 0;
             bottom: 0;
             width: 1px;
-            background: #586e75; /* base01 */
-            opacity: 0.2;
+            background: var(--base00);
+            opacity: 0.6;
         }
         
         .grid-label {
@@ -256,7 +428,7 @@ export class VerticalVisualizer {
             top: -20px;
             transform: translateX(-50%);
             font-size: 11px;
-            color: #586e75; /* base01 */
+            color: var(--base00);
         }
         
         .segment-bar {
@@ -273,12 +445,12 @@ export class VerticalVisualizer {
         }
         
         .segment-bar:hover {
-            opacity: 0.9;
+            opacity: 1;
             transform: translateX(2px);
         }
         
         .segment-label {
-            color: #fdf6e3; /* base3 */
+            color: var(--base3);
             font-size: 13px;
             font-weight: 500;
             white-space: nowrap;
@@ -286,50 +458,86 @@ export class VerticalVisualizer {
             position: relative;
         }
         
-        .type-user { background: #859900; } /* green */
-        .type-system { background: #6c71c4; } /* violet */
-        .type-assistant { background: #268bd2; } /* blue */
-        .type-tools { background: #d33682; } /* magenta */
-        .type-mcp_tools { background: #dc322f; } /* red */
-        .type-tool_use { background: #cb4b16; } /* orange */
+        
+        .type-user { background: var(--green); opacity: 0.85; }
+        .type-system { background: var(--violet); opacity: 0.85; }
+        .type-assistant { background: var(--blue); opacity: 0.85; }
+        .type-tools { background: var(--magenta); opacity: 0.85; }
+        .type-mcp_tools { background: var(--red); opacity: 0.85; }
+        .type-tool_use { background: var(--orange); opacity: 0.85; }
         
         .is-new {
             box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.4);
         }
         
+        .is-repeated {
+            opacity: 0.5 !important;
+            position: relative;
+        }
+        
+        .is-repeated::after {
+            content: '↺';
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px;
+        }
+        
         .is-preprocessing {
-            opacity: 0.5;
+            opacity: 0.7 !important;
             background-image: repeating-linear-gradient(
                 -45deg,
                 transparent,
-                transparent 5px,
-                rgba(0, 0, 0, 0.2) 5px,
-                rgba(0, 0, 0, 0.2) 10px
+                transparent 8px,
+                rgba(0, 0, 0, 0.3) 8px,
+                rgba(0, 0, 0, 0.3) 16px
             );
         }
         
         .turn-marker {
             font-size: 11px;
-            color: #586e75; /* base01 */
+            color: var(--base01);
             margin: 8px 0 4px 0;
             font-weight: 600;
         }
         
+        .turn-marker:first-child {
+            margin-top: -20px;
+        }
+        
+        .compaction-marker {
+            margin: 20px 0;
+            padding: 15px;
+            background: var(--base01);
+            border-radius: 6px;
+            text-align: center;
+            border: 2px dashed var(--orange);
+        }
+        
+        .compaction-text {
+            color: var(--orange);
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+        
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
         }
         
         .stat-section {
-            background: #073642; /* base02 */
+            background: var(--base02);
             padding: 15px;
             border-radius: 6px;
         }
         
         .stat-section h3 {
-            color: #93a1a1; /* base1 */
+            color: var(--base1);
             margin: 0 0 10px 0;
             font-size: 14px;
         }
@@ -346,17 +554,17 @@ export class VerticalVisualizer {
         }
         
         .stat-label {
-            color: #839496; /* base0 */
+            color: var(--base0);
         }
         
         .stat-value {
-            color: #93a1a1; /* base1 */
+            color: var(--base1);
             font-weight: 500;
         }
         
         .stat-bar {
             height: 20px;
-            background: #002b36; /* base03 */
+            background: var(--base03);
             border-radius: 3px;
             overflow: hidden;
         }
@@ -366,16 +574,68 @@ export class VerticalVisualizer {
             transition: width 0.3s;
         }
         
-        .type-bar-mcp_tools { background: #dc322f; } /* red */
-        .type-bar-tools { background: #d33682; } /* magenta */
-        .type-bar-system { background: #6c71c4; } /* violet */
-        .type-bar-tool_use { background: #cb4b16; } /* orange */
-        .type-bar-assistant { background: #268bd2; } /* blue */
-        .type-bar-user { background: #859900; } /* green */
+        .type-bar-mcp_tools { background: var(--red); }
+        .type-bar-tools { background: var(--magenta); }
+        .type-bar-system { background: var(--violet); }
+        .type-bar-tool_use { background: var(--orange); }
+        .type-bar-assistant { background: var(--blue); }
+        .type-bar-user { background: var(--green); }
+        
+        .pie-chart-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            gap: 5px;
+        }
+        
+        .pie-legend {
+            margin-top: 0;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+        
+        .pie-legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 2px;
+            white-space: nowrap;
+        }
+        
+        .pie-legend-color {
+            width: 10px;
+            height: 10px;
+            margin-right: 5px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+        
+        .pie-legend-label {
+            color: #93a1a1; /* base1 - increased contrast */
+        }
+        
+        .pie-legend-value {
+            color: #839496; /* base0 - increased contrast */
+            font-size: 9px;
+        }
+        
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 8px 12px;
+            font-size: 13px;
+            background: var(--base02);
+            color: var(--base3);
+            border: 1px solid var(--base01);
+            border-radius: 4px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
         
         .preprocessing-note {
             font-size: 12px;
-            color: #586e75; /* base01 */
+            color: var(--base01);
             font-style: italic;
             margin-top: 10px;
         }
@@ -384,8 +644,8 @@ export class VerticalVisualizer {
             position: fixed;
             top: 20px;
             right: 20px;
-            background: #073642; /* base02 */
-            border: 1px solid #586e75; /* base01 */
+            background: var(--base02);
+            border: 1px solid var(--base01);
             border-radius: 4px;
             padding: 12px 16px;
             font-size: 14px;
@@ -409,236 +669,178 @@ export class VerticalVisualizer {
         }
         
         .control-item label {
-            color: #93a1a1; /* base1 */
+            color: var(--base1);
             cursor: pointer;
             user-select: none;
         }
         
         .control-item label:hover {
-            color: #fdf6e3; /* base3 */
+            color: var(--base3);
         }
         
-        /* Modal styles */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 2000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            overflow: auto;
-        }
-        
-        .modal-content {
-            background-color: #073642; /* base02 */
-            margin: 5% auto;
-            padding: 20px;
-            border: 2px solid #586e75; /* base01 */
-            border-radius: 8px;
-            width: 80%;
-            max-width: 800px;
-            max-height: 80vh;
-            overflow-y: auto;
-            position: relative;
-        }
-        
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #586e75; /* base01 */
-        }
-        
-        .modal-title {
-            color: #93a1a1; /* base1 */
-            font-size: 18px;
-            font-weight: 600;
-        }
-        
-        .modal-close {
-            color: #839496; /* base0 */
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-            line-height: 20px;
-            padding: 0 8px;
-            border-radius: 4px;
-            transition: background 0.2s;
-        }
-        
-        .modal-close:hover {
-            background: #002b36; /* base03 */
-            color: #fdf6e3; /* base3 */
-        }
-        
-        .modal-body {
-            color: #839496; /* base0 */
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            background: #002b36; /* base03 */
-            padding: 15px;
-            border-radius: 4px;
-            border: 1px solid #073642; /* base02 */
-            overflow-x: auto;
-        }
-        
-        .json-key {
-            color: #268bd2; /* blue */
-        }
-        
-        .json-string {
-            color: #2aa198; /* cyan */
-        }
-        
-        .json-number {
-            color: #d33682; /* magenta */
-        }
-        
-        .json-boolean {
-            color: #b58900; /* yellow */
-        }
-        
-        .json-null {
-            color: #dc322f; /* red */
-        }
     </style>
 </head>
 <body>
-    <div class="controls">
-        <div class="control-item">
-            <input type="checkbox" id="logScale" checked onchange="updateVisualization()">
-            <label for="logScale">Log scale</label>
-        </div>
-        <div class="control-item">
-            <input type="checkbox" id="groupMCPs" onchange="updateVisualization()">
-            <label for="groupMCPs">Group MCPs</label>
-        </div>
-    </div>
-    
-    <!-- Modal for showing raw content -->
-    <div id="contentModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title" id="modalTitle">Segment Content</h2>
-                <span class="modal-close" onclick="closeModal()">&times;</span>
+    <div class="max-w-7xl mx-auto">
+        <!-- Header with stats -->
+        <div class="flex flex-col lg:flex-row lg:items-center gap-4 mb-4">
+            <h1 class="page-title">Claude Trace Visualization</h1>
+            
+            <!-- Summary Stats -->
+            <div class="flex flex-wrap gap-3 lg:ml-auto">
+            <!-- Total tokens card -->
+            <div class="stats-card">
+                <div class="stat-value">${stats.totalTokens.toLocaleString()}</div>
+                <div class="stat-label">total tokens</div>
             </div>
-            <div class="modal-body" id="modalBody"></div>
-        </div>
-    </div>
-    
-    <h1>Claude Trace Vertical Visualization</h1>
-    
-    <div class="stats">
-        Total tokens: ${stats.totalTokens.toLocaleString()} (${((stats.totalTokens / maxTokens) * 100).toFixed(1)}% of ${maxTokens.toLocaleString()} context)
-        ${stats.preprocessingTokens > 0 ? `<br>Preprocessing tokens: ${stats.preprocessingTokens.toLocaleString()} (not counted in total)` : ''}
-    </div>
-    
-    <div class="legend">
-        <div class="legend-item">
-            <div class="legend-dot type-user"></div>
-            <span>User</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-dot type-system"></div>
-            <span>System</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-dot type-assistant"></div>
-            <span>Assistant</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-dot type-tools"></div>
-            <span>Anthropic Tools</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-dot type-mcp_tools"></div>
-            <span>MCP Tools</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-dot type-tool_use"></div>
-            <span>Tool Use</span>
-        </div>
-    </div>
-    
-    <div class="stats-grid">
-        <div class="stat-section">
-            <h3>Token Distribution by Type</h3>
-            ${Object.entries(stats.typeTokens)
-              .sort(([, a], [, b]) => b - a)
-              .map(([type, tokens]) => {
-                const percentage = (tokens / stats.totalTokens * 100).toFixed(1);
-                return `
-                <div class="stat-row">
-                    <div class="stat-header">
-                        <span class="stat-label">${this.formatTypeName(type)}</span>
-                        <span class="stat-value">${tokens.toLocaleString()} (${percentage}%)</span>
-                    </div>
-                    <div class="stat-bar">
-                        <div class="stat-bar-fill type-bar-${type}" style="width: ${percentage}%"></div>
-                    </div>
-                </div>
-              `;}).join('')}
+            
+            <!-- Context percentage card -->
+            <div class="stats-card">
+                <div class="stat-value">${((stats.totalTokens / maxTokens) * 100).toFixed(1)}%</div>
+                <div class="stat-label">of ${maxTokens.toLocaleString()} context</div>
+            </div>
+            
+            ${stats.preprocessingTokens > 0 ? `
+            <!-- Preprocessing tokens card -->
+            <div class="stats-card">
+                <div class="stat-value">${stats.preprocessingTokens.toLocaleString()}</div>
+                <div class="stat-label">preprocessing tokens</div>
+            </div>` : ''}
+            
+            ${Object.entries(stats.allModelTokens)
+                .sort(([, a], [, b]) => b - a)
+                .map(([model, tokens]) => {
+                    const percentage = ((tokens / (stats.totalTokens + stats.preprocessingTokens)) * 100).toFixed(1);
+                    return `
+            <!-- ${model} model card -->
+            <div class="stats-card">
+                <div class="stat-value">${model}: ${tokens.toLocaleString()}</div>
+                <div class="stat-label">${percentage}% of all tokens</div>
+            </div>`;
+                }).join('')}
+            </div>
         </div>
         
-        <div class="stat-section">
-            <h3>Token Distribution by Model</h3>
-            ${Object.entries(stats.modelTokens)
-              .sort(([, a], [, b]) => b - a)
-              .map(([model, tokens]) => {
-                const totalWithPreprocessing = stats.totalTokens + stats.preprocessingTokens;
-                const percentage = (tokens / totalWithPreprocessing * 100).toFixed(1);
-                return `
-                <div class="stat-row">
-                    <div class="stat-header">
-                        <span class="stat-label">${model}</span>
-                        <span class="stat-value">${tokens.toLocaleString()} (${percentage}%)</span>
+        <!-- Compact Stats Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <!-- Token Distribution (horizontal bars) -->
+            <div class="chart-container">
+                <h4 class="chart-title">Token Distribution</h4>
+                <div class="space-y-1">
+                    ${Object.entries(stats.typeTokens)
+                        .sort(([, a], [, b]) => b - a)
+                        .map(([type, tokens]) => {
+                            const percentage = ((tokens / stats.totalTokens) * 100).toFixed(1);
+                            const colors: Record<string, string> = {
+                                'mcp_tools': 'bg-red-500',
+                                'tools': 'bg-pink-500',
+                                'system': 'bg-violet-500',
+                                'tool_use': 'bg-amber-500',
+                                'assistant': 'bg-blue-500',
+                                'user': 'bg-emerald-500'
+                            };
+                            return `
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs stat-label w-20">${this.formatTypeName(type)}</span>
+                        <div class="flex-1 bar-track rounded-full h-3 relative">
+                            <div class="${colors[type] || 'bg-gray-500'} h-3 rounded-full" style="width: ${percentage}%"></div>
+                        </div>
+                        <span class="text-xs stat-label w-10 text-right">${percentage}%</span>
                     </div>
+                    `;}).join('')}
                 </div>
-              `;}).join('')}
+            </div>
+            
+            ${topMcps.length > 0 ? `
+            <!-- MCP Tools (horizontal bars) -->
+            <div class="chart-container">
+                <h4 class="chart-title">MCP Tools</h4>
+                <div class="space-y-1">
+                    ${topMcps.slice(0, 4).map(([mcp, tokens]) => {
+                        const percentage = (tokens / stats.totalTokens * 100).toFixed(1);
+                        return `
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs stat-label w-32">${mcp}</span>
+                        <div class="flex-1 bar-track rounded-full h-3 relative">
+                            <div class="bg-red-500 h-3 rounded-full" style="width: ${percentage}%"></div>
+                        </div>
+                        <span class="text-xs stat-label w-10 text-right">${percentage}%</span>
+                    </div>
+                    `;}).join('')}
+                </div>
+            </div>
+            ` : ''}
         </div>
         
-        ${topMcps.length > 0 ? `
-        <div class="stat-section">
-            <h3>Top MCP Tools by Tokens</h3>
-            ${topMcps.map(([mcp, tokens]) => {
-                const percentage = (tokens / stats.totalTokens * 100).toFixed(1);
-                return `
-                <div class="stat-row">
-                    <div class="stat-header">
-                        <span class="stat-label">${mcp}</span>
-                        <span class="stat-value">${tokens.toLocaleString()} (${percentage}%)</span>
+        <!-- Timeline Visualization -->
+        <div class="timeline-container">
+            <!-- Floating controls and legend on the right below scale -->
+            <div class="absolute" style="top: 44px; right: 16px; z-index: 100; pointer-events: auto;">
+                <div class="floating-controls">
+                    <!-- Checkboxes -->
+                    <div class="flex flex-col gap-2 mb-3">
+                        <label class="flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="logScale" checked onchange="updateVisualization()" class="h-3 w-3 text-blue-600 rounded">
+                            <span class="control-label">Log scale</span>
+                        </label>
+                        <label class="flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="groupMCPs" onchange="updateVisualization()" class="h-3 w-3 text-blue-600 rounded">
+                            <span class="control-label">Group MCPs</span>
+                        </label>
                     </div>
-                    <div class="stat-bar">
-                        <div class="stat-bar-fill type-bar-mcp_tools" style="width: ${percentage}%"></div>
+                    <!-- Legend -->
+                    <div class="flex flex-col gap-1 pt-2 legend-border">
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-emerald-500"></span>
+                            <span class="legend-item">User</span>
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-violet-500"></span>
+                            <span class="legend-item">System</span>
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-blue-500"></span>
+                            <span class="legend-item">Assistant</span>
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-pink-500"></span>
+                            <span class="legend-item">Anthropic Tools</span>
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-red-500"></span>
+                            <span class="legend-item">MCP Tools</span>
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-amber-500"></span>
+                            <span class="legend-item">Tool Use</span>
+                        </span>
                     </div>
                 </div>
-            `;}).join('')}
-        </div>
-        ` : ''}
-    </div>
-    
-    <div id="visualization-container">
-        <div id="bars">
-            <div class="grid-lines">
-                ${gridLinesHTML}
             </div>
-            ${barsHTML}
+            
+            <div id="bars" class="relative">
+                <div class="grid-lines">
+                    ${gridLinesHTML}
+                </div>
+                ${barsHTML}
+            </div>
         </div>
-    </div>
-    
-    <div class="preprocessing-note">
-        * Bars with crosshatch pattern represent preprocessing requests (not counted in main token total)<br>
-        * Token counts marked with ~ are estimates
+        
+        <div class="footer-notes space-y-1">
+            <p>• Bars with diagonal stripes represent preprocessing requests (not counted in main total)</p>
+            <p>• Token counts marked with ~ are estimates</p>
+            <p>• Bars with white borders are new content in that turn</p>
+            <p>• Faded bars with ↺ symbol are repeated content from previous turns</p>
+        </div>
     </div>
     
     <script>
+        // Global error handler
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            console.error('JavaScript error:', msg, 'at line:', lineNo);
+            return false;
+        };
+        
         const maxSegmentTokens = ${maxSegmentTokens};
         const minWidthPercent = ${minWidthPercent};
         const maxWidthPercent = ${maxWidthPercent};
@@ -646,20 +848,132 @@ export class VerticalVisualizer {
         // Store original segments for MCP grouping
         const originalBarsHTML = \`<div class="grid-lines">${gridLinesHTML}</div>${barsHTML}\`;
         const segments = ${JSON.stringify(segments)};
-        const traceFilePath = ${JSON.stringify(traceFilePath)};
+        const stats = ${JSON.stringify(stats)};
         
-        // Note: In a real implementation, we would need to make an API call to read the trace file
-        // For now, we'll show the metadata and indicate that full raw data requires server access
+        // Colors for the pie charts (matching Tailwind classes)
+        const typeColors = {
+            'user': '#10b981',      // emerald-500
+            'system': '#8b5cf6',    // violet-500
+            'assistant': '#3b82f6', // blue-500
+            'tools': '#ec4899',     // pink-500
+            'mcp_tools': '#ef4444', // red-500
+            'tool_use': '#f59e0b',  // amber-500
+            'other': '#6b7280'      // gray-500
+        };
+        
+        
+        // Model colors
+        const modelColors = [
+            '#eab308', // yellow-500
+            '#06b6d4', // cyan-500
+            '#8b5cf6', // violet-500
+            '#ec4899', // pink-500
+            '#f59e0b'  // amber-500
+        ];
+        
+        function createPieChart(containerId, data, colors, isTypeChart = false) {
+            // Compact pie charts
+            const width = 120;
+            const height = 120;
+            const radius = Math.min(width, height) / 2;
+            
+            // Clear any existing chart
+            d3.select(containerId).selectAll("*").remove();
+            
+            // Create tooltip
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip");
+            
+            // Create SVG for pie chart
+            const svg = d3.select(containerId)
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .append("g")
+                .attr("transform", \`translate(\${width / 2}, \${height / 2})\`);
+            
+            // Create legend container beside the pie chart
+            const legendContainer = d3.select(containerId)
+                .append("div")
+                .attr("class", "text-xs space-y-1 ml-4 flex-1");
+            
+            const pie = d3.pie()
+                .sort(null)
+                .value(d => d.value);
+            
+            const arc = d3.arc()
+                .innerRadius(0)
+                .outerRadius(radius);
+            
+            const arcs = svg.selectAll("arc")
+                .data(pie(data))
+                .enter()
+                .append("g");
+            
+            arcs.append("path")
+                .attr("d", arc)
+                .attr("fill", (d, i) => {
+                    if (isTypeChart) {
+                        return typeColors[d.data.name] || '#586e75';
+                    } else {
+                        return modelColors[i % modelColors.length];
+                    }
+                })
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 1)
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(\`\${d.data.label}: \${d.data.value.toLocaleString()} tokens (\${d.data.percentage}%)\`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+            
+            // Add percentage labels for segments > 5%
+            arcs.append("text")
+                .attr("transform", d => \`translate(\${arc.centroid(d)})\`)
+                .attr("text-anchor", "middle")
+                .style("fill", "#fdf6e3")
+                .style("font-size", "12px")
+                .style("font-weight", "bold")
+                .text(d => d.data.percentage >= 5 ? \`\${d.data.percentage}%\` : "");
+            
+            // Add legend with compact spacing
+            data.forEach((item, i) => {
+                const legendItem = legendContainer.append("div")
+                    .attr("class", "flex items-center gap-1.5 py-0.5");
+                
+                legendItem.append("div")
+                    .attr("class", "w-2 h-2 rounded-full flex-shrink-0")
+                    .style("background-color", isTypeChart ? 
+                        (typeColors[item.name] || '#6b7280') : 
+                        modelColors[i % modelColors.length]);
+                
+                legendItem.append("span")
+                    .attr("class", "text-gray-600 text-xs leading-tight")
+                    .text(\`\${item.label} \${item.percentage}%\`);
+            });
+        }
         
         function updateVisualization() {
-            const logScale = document.getElementById('logScale').checked;
-            const groupMCPs = document.getElementById('groupMCPs').checked;
-            
-            // Update bars based on MCP grouping
-            updateBars(groupMCPs);
-            
-            // Update scale
-            updateScale(logScale);
+            try {
+                const logScale = document.getElementById('logScale').checked;
+                const groupMCPs = document.getElementById('groupMCPs').checked;
+                
+                // Update bars based on MCP grouping
+                updateBars(groupMCPs);
+                
+                // Update scale
+                updateScale(logScale);
+            } catch (error) {
+                console.error('Error in updateVisualization:', error);
+            }
         }
         
         function updateBars(groupMCPs) {
@@ -716,6 +1030,12 @@ export class VerticalVisualizer {
                 let currentTurnNum = -1;
                 
                 for (const segment of groupedSegments) {
+                    // Handle compaction markers specially
+                    if (segment.isCompaction) {
+                        newBarsHTML += \`<div class="compaction-marker"><span class="compaction-text">═══ Conversation Compacted ═══</span></div>\\n\`;
+                        continue;
+                    }
+                    
                     if (segment.turn !== currentTurnNum) {
                         currentTurnNum = segment.turn;
                         newBarsHTML += \`<div class="turn-marker">Turn \${currentTurnNum}</div>\\n\`;
@@ -725,6 +1045,7 @@ export class VerticalVisualizer {
                         'segment-bar',
                         \`type-\${segment.type}\`,
                         segment.isNew ? 'is-new' : '',
+                        segment.isRepeated ? 'is-repeated' : '',
                         segment.isPreprocessing ? 'is-preprocessing' : ''
                     ].filter(c => c).join(' ');
                     
@@ -736,15 +1057,50 @@ export class VerticalVisualizer {
                         title = \`MCPs: \${segment.mcpNames.join(', ')}\\nTotal: \${segment.tokens.toLocaleString()} tokens\`;
                     }
                     
-                    newBarsHTML += \`<div class="\${classes}" data-tokens="\${segment.tokens}" style="width: 50%;" title="\${escapeHtml(title)}">
+                    const initialWidth = 50; // Initial width percentage for grouped view
+                    
+                    newBarsHTML += \`<div class="\${classes}" data-tokens="\${segment.tokens}" style="width: \${initialWidth}%;" title="\${escapeHtml(title)}">
         <span class="segment-label">\${escapeHtml(label)}</span>
       </div>\\n\`;
                 }
                 
                 barsContainer.innerHTML = newBarsHTML;
             } else {
-                // Restore original bars
-                barsContainer.innerHTML = originalBarsHTML;
+                // Regenerate bars without MCP grouping but with preprocessing filter
+                let newBarsHTML = '<div class="grid-lines"></div>';
+                let currentTurnNum = -1;
+                
+                for (const segment of segments) {
+                    // Handle compaction markers specially
+                    if (segment.isCompaction) {
+                        newBarsHTML += '<div class="compaction-marker"><span class="compaction-text">═══ Conversation Compacted ═══</span></div>\\n';
+                        continue;
+                    }
+                    
+                    if (segment.turn !== currentTurnNum) {
+                        currentTurnNum = segment.turn;
+                        newBarsHTML += '<div class="turn-marker">Turn ' + currentTurnNum + '</div>\\n';
+                    }
+                    
+                    const classes = [
+                        'segment-bar',
+                        'type-' + segment.type,
+                        segment.isNew ? 'is-new' : '',
+                        segment.isRepeated ? 'is-repeated' : '',
+                        segment.isPreprocessing ? 'is-preprocessing' : ''
+                    ].filter(c => c).join(' ');
+                    
+                    const tokenLabel = segment.tokensEstimated ? '~' : '';
+                    const label = segment.displayName + ' (' + tokenLabel + segment.tokens.toLocaleString() + ' tokens)';
+                    
+                    const initialWidth = 50; // Initial width percentage
+                    
+                    newBarsHTML += '<div class="' + classes + '" data-tokens="' + segment.tokens + '" style="width: ' + initialWidth + '%;" title="' + escapeHtml(segment.content || '') + '">' +
+                        '<span class="segment-label">' + escapeHtml(label) + '</span>' +
+                      '</div>\\n';
+                }
+                
+                barsContainer.innerHTML = newBarsHTML;
             }
             
             // Redraw grid lines after updating bars
@@ -771,6 +1127,7 @@ export class VerticalVisualizer {
                 }
                 
                 bar.style.width = widthPercent + '%';
+                
             });
             
             // Update grid lines
@@ -785,7 +1142,8 @@ export class VerticalVisualizer {
                 '"': '&quot;',
                 "'": '&#039;'
             };
-            return text.replace(/[&<>"']/g, m => map[m]);
+            // Handle backticks separately to avoid breaking template literals
+            return text.replace(/[&<>"']/g, m => map[m]).replace(/\`/g, '&#96;');
         }
         
         function updateGridLines(scale, currentMaxTokens) {
@@ -840,136 +1198,18 @@ export class VerticalVisualizer {
             }
         }
         
-        // Modal functions
-        async function showSegmentContent(segmentIndex) {
-            const segment = segments[segmentIndex];
-            if (!segment) return;
-            
-            const modal = document.getElementById('contentModal');
-            const modalTitle = document.getElementById('modalTitle');
-            const modalBody = document.getElementById('modalBody');
-            
-            // Set title
-            modalTitle.textContent = \`\${segment.displayName} - \${segment.type} (\${segment.tokens.toLocaleString()} tokens)\`;
-            
-            // Note: To show actual raw data from the trace file, we would need server access
-            // This is a limitation of the static HTML output
-            let rawData = null;
-            let dataSource = 'reconstructed';
-            
-            // Build representation from segment data
-            switch (segment.type) {
-                    case 'user':
-                        rawData = {
-                            role: 'user',
-                            content: segment.content.endsWith('...') ? 
-                                segment.content + ' [TRUNCATED]' : segment.content
-                        };
-                        break;
-                        
-                    case 'assistant':
-                        rawData = {
-                            role: 'assistant',
-                            content: [{
-                                type: 'text',
-                                text: segment.content.endsWith('...') ? 
-                                    segment.content + ' [TRUNCATED]' : segment.content
-                            }]
-                        };
-                        break;
-                        
-                    case 'system':
-                        rawData = {
-                            system: segment.content.endsWith('...') ? 
-                                segment.content + ' [TRUNCATED]' : segment.content
-                        };
-                        break;
-                        
-                    case 'tool_use':
-                        const toolMatch = segment.content.match(/Using tool: (\\S+)/);
-                        rawData = {
-                            type: 'tool_use',
-                            name: toolMatch ? toolMatch[1] : 'unknown',
-                            input: '[TOOL INPUT DATA]'
-                        };
-                        break;
-                        
-                    case 'tools':
-                    case 'mcp_tools':
-                        rawData = {
-                            tools: \`[\${segment.toolCount} tool definitions]\`,
-                            note: 'Full tool schemas not shown for brevity'
-                        };
-                        break;
-            }
-            
-            // Add metadata
-            const metadata = {
-                segment_info: {
-                    type: segment.type,
-                    model: segment.model,
-                    turn: segment.turn,
-                    tokens: segment.tokens,
-                    tokens_estimated: segment.tokensEstimated,
-                    is_new: segment.isNew || false,
-                    is_preprocessing: segment.isPreprocessing,
-                    line_number: segment.lineNumber,
-                    segment_index: segment.segmentIndex,
-                    data_source: dataSource
-                },
-                note: segment.lineNumber !== undefined ? 
-                    'Full raw data from trace file requires server access' : 
-                    'Line number not available for full raw data'
+        
+        function formatTypeName(type) {
+            const typeNames = {
+                'user': 'User',
+                'system': 'System',
+                'assistant': 'Assistant',
+                'tools': 'Anthropic Tools',
+                'mcp_tools': 'MCP Tools',
+                'tool_use': 'Tool Use'
             };
-            
-            // Format as JSON with syntax highlighting
-            const displayData = {
-                metadata,
-                raw_data: rawData
-            };
-            
-            // Add trace file location info if available
-            if (segment.lineNumber !== undefined) {
-                displayData.trace_location = {
-                    file: traceFilePath,
-                    line: segment.lineNumber + 1,  // Convert to 1-indexed for display
-                    segment_index: segment.segmentIndex
-                };
-            }
-            
-            const jsonStr = JSON.stringify(displayData, null, 2);
-            
-            // Basic JSON syntax highlighting
-            const highlightedJson = jsonStr
-                .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
-                .replace(/: "([^"]*)"/g, ': <span class="json-string">"$1"</span>')
-                .replace(/: (\\d+)/g, ': <span class="json-number">$1</span>')
-                .replace(/: (true|false)/g, ': <span class="json-boolean">$1</span>')
-                .replace(/: null/g, ': <span class="json-null">null</span>');
-            
-            modalBody.innerHTML = highlightedJson;
-            modal.style.display = 'block';
+            return typeNames[type] || type;
         }
-        
-        function closeModal() {
-            const modal = document.getElementById('contentModal');
-            modal.style.display = 'none';
-        }
-        
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('contentModal');
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
-        }
-        
-        // Close modal with Escape key
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape') {
-                closeModal();
-            }
-        });
     </script>
 </body>
 </html>`;
@@ -983,7 +1223,8 @@ export class VerticalVisualizer {
       '"': '&quot;',
       "'": '&#039;'
     };
-    return text.replace(/[&<>"']/g, m => map[m]);
+    // Handle backticks separately to avoid breaking template literals
+    return text.replace(/[&<>"']/g, m => map[m]).replace(/`/g, '&#96;');
   }
 
   private formatTypeName(type: string): string {

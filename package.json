@@ -27,12 +27,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/claude-trace-viz"
+    "url": "https://github.com/adstastic/claude-trace-viz"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/claude-trace-viz/issues"
+    "url": "https://github.com/adstastic/claude-trace-viz/issues"
   },
-  "homepage": "https://github.com/yourusername/claude-trace-viz#readme",
+  "homepage": "https://github.com/adstastic/claude-trace-viz#readme",
   "dependencies": {
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@mariozechner/claude-trace": "^1.0.3",

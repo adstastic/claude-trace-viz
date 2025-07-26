@@ -9,21 +9,21 @@ describe('TokenCounter', () => {
   });
 
   describe('getTokenCount', () => {
-    it('should use actual API token count when available', () => {
+    it('should always use tokenizer estimation', () => {
+      const testText = 'This is a test response';
       const segment = {
         type: 'assistant',
         isNew: true,
-        content: 'This is a test response'
-      };
-      
-      const apiUsage = {
-        output_tokens: 42
+        content: testText
       };
 
-      const result = tokenCounter.getTokenCount(segment, apiUsage);
+      const result = tokenCounter.getTokenCount(segment);
       
-      expect(result.count).toBe(42);
-      expect(result.isEstimate).toBe(false);
+      // Get expected count from Anthropic tokenizer
+      const expectedCount = countTokens(testText);
+      
+      expect(result.count).toBe(expectedCount);
+      expect(result.isEstimate).toBe(true);
     });
 
     it('should fall back to Anthropic tokenizer when no API usage data', () => {
